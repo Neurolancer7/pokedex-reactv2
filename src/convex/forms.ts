@@ -1,7 +1,8 @@
-"use node";
+/* removed "use node" to allow defining internal mutations/queries in this file */
 
 import { v } from "convex/values";
 import { internalAction, internalMutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 // Helper to map national dex id to generation
 function getGenerationFromId(id: number): number {
@@ -77,7 +78,7 @@ function classifyCategories(form: any): {
   };
 }
 
-// Upsert a single form row
+// Replace the upsertForm implementation to delegate to pokemonInternal and match schema
 export const upsertForm = internalMutation({
   args: {
     formId: v.number(),
@@ -102,55 +103,38 @@ export const upsertForm = internalMutation({
     isAlternate: v.boolean(),
   },
   handler: async (ctx, args) => {
-    // Upsert pokemonForms
-    const existing = await ctx.db
-      .query("pokemonForms")
-      .withIndex("by_form_id", (q) => q.eq("formId", args.formId))
-      .collect();
+    // Build categories array to align with schema and canonical upsert
+    const categories: string[] = [];
+    if (args.isMega) categories.push("mega");
+    if (args.isGigantamax) categories.push("gigantamax");
+    if (args.isRegional) categories.push("regional");
+    if (args.isGender) categories.push("gender");
+    if (args.isCosmetic) categories.push("cosmetic");
+    if (args.isAlternate) categories.push("alternate");
 
-    const doc = {
+    // Delegate to the canonical forms upsert
+    await ctx.runMutation(internal.pokemonInternal.upsertForm, {
       formId: args.formId,
-      pokemonId: args.pokemonId,
-      pokemonName: args.pokemonName,
-      speciesId: args.speciesId,
       formName: args.formName,
+      pokemonName: args.pokemonName,
+      pokemonId: args.pokemonId,
+      categories,
       isDefault: args.isDefault,
       isBattleOnly: args.isBattleOnly,
       formOrder: args.formOrder,
+      sprites: {
+        frontDefault: args.sprites.frontDefault,
+        frontShiny: undefined,
+        officialArtwork: args.sprites.officialArtwork,
+      },
       versionGroup: args.versionGroup,
-      sprites: args.sprites,
-      generation: args.generation,
-      isMega: args.isMega,
-      isGigantamax: args.isGigantamax,
-      isRegional: args.isRegional,
-      isGender: args.isGender,
-      isCosmetic: args.isCosmetic,
-      isAlternate: args.isAlternate,
-    };
+    });
 
-    if (existing.length > 0) {
-      await ctx.db.patch(existing[0]._id, doc);
-    } else {
-      await ctx.db.insert("pokemonForms", doc);
-    }
-
-    // Also patch the base pokemon doc with union of categories (so existing list filter continues to work fast)
-    const poke = await ctx.db
-      .query("pokemon")
-      .withIndex("by_pokemon_id", (q) => q.eq("pokemonId", args.pokemonId))
-      .collect();
-
-    if (poke.length > 0) {
-      const p = poke[0];
-      const tags = new Set<string>(Array.isArray((p as any).formTags) ? (p as any).formTags : []);
-      if (args.isMega) tags.add("mega");
-      if (args.isGigantamax) tags.add("gigantamax");
-      if (args.isRegional) tags.add("regional");
-      if (args.isGender) tags.add("gender");
-      if (args.isCosmetic) tags.add("cosmetic");
-      if (args.isAlternate) tags.add("alternate");
-      await ctx.db.patch(p._id, { formTags: Array.from(tags) });
-    }
+    // Merge categories into base pokemon.formTags for frontend filters
+    await ctx.runMutation(internal.pokemonInternal.mergeFormTagsIntoPokemon, {
+      pokemonId: args.pokemonId,
+      categories,
+    });
   },
 });
 
@@ -190,7 +174,7 @@ export const processFormPage = internalAction({
 
             const cats = classifyCategories(formData);
 
-            await ctx.runMutation(upsertForm, {
+            await ctx.runMutation(internal.forms.upsertForm, {
               formId: Number(formData.id),
               pokemonId,
               pokemonName: String(formData?.pokemon?.name ?? ""),
@@ -236,18 +220,18 @@ export const processAll = internalAction({
 
     const schedules: Array<Promise<any>> = [];
     for (let offset = 0; offset < count; offset += pageSize) {
-      schedules.push(ctx.scheduler.runAfter(0, processFormPage, { offset, pageSize }));
+      schedules.push(ctx.scheduler.runAfter(0, internal.forms.processFormPage, { offset, pageSize }));
     }
     await Promise.allSettled(schedules);
   },
 });
 
-// Query: list forms with filters (category, pokemonId, generation, search)
+// Replace the list query to avoid non-existent boolean/generation indexes and use categories
 export const list = query({
   args: {
     limit: v.optional(v.number()),
     offset: v.optional(v.number()),
-    category: v.optional(v.string()), // "regional" | "alternate" | "mega" | "gigantamax" | "gender" | "cosmetic"
+    category: v.optional(v.string()),
     pokemonId: v.optional(v.number()),
     generation: v.optional(v.number()),
     search: v.optional(v.string()),
@@ -257,27 +241,41 @@ export const list = query({
     const offset = Math.max(0, args.offset ?? 0);
     const search = args.search?.trim().toLowerCase();
 
-    let q = ctx.db.query("pokemonForms");
-
-    // Prioritize by most selective index
+    let rows;
     if (typeof args.pokemonId === "number") {
-      q = ctx.db.query("pokemonForms").withIndex("by_pokemon_id", (ii) => ii.eq("pokemonId", args.pokemonId!));
-    } else if (typeof args.generation === "number" && args.generation >= 1 && args.generation <= 9) {
-      q = ctx.db.query("pokemonForms").withIndex("by_generation", (ii) => ii.eq("generation", args.generation!));
-    } else if (args.category) {
-      const cat = args.category.toLowerCase();
-      if (cat === "mega") q = ctx.db.query("pokemonForms").withIndex("by_isMega", (ii) => ii.eq("isMega", true));
-      else if (cat === "gigantamax") q = ctx.db.query("pokemonForms").withIndex("by_isGigantamax", (ii) => ii.eq("isGigantamax", true));
-      else if (cat === "regional") q = ctx.db.query("pokemonForms").withIndex("by_isRegional", (ii) => ii.eq("isRegional", true));
-      else if (cat === "gender") q = ctx.db.query("pokemonForms").withIndex("by_isGender", (ii) => ii.eq("isGender", true));
-      else if (cat === "cosmetic") q = ctx.db.query("pokemonForms").withIndex("by_isCosmetic", (ii) => ii.eq("isCosmetic", true));
-      else if (cat === "alternate") q = ctx.db.query("pokemonForms").withIndex("by_isAlternate", (ii) => ii.eq("isAlternate", true));
+      rows = await ctx.db
+        .query("pokemonForms")
+        .withIndex("by_pokemon_id", (ii) => ii.eq("pokemonId", args.pokemonId!))
+        .collect();
+    } else {
+      // Fallback: collect all; category/generation filtering will be applied in-memory
+      rows = await ctx.db.query("pokemonForms").collect();
     }
 
-    const rows = await q.collect();
     let results = rows;
 
-    // Optional search by pokemonName or formName (client-side, small result sets due to indexes above)
+    // Filter by generation derived from pokemonId (schema does not store generation on forms)
+    if (
+      typeof args.generation === "number" &&
+      args.generation >= 1 &&
+      args.generation <= 9
+    ) {
+      results = results.filter(
+        (r) => getGenerationFromId(r.pokemonId) === args.generation,
+      );
+    }
+
+    // Filter by category via categories array
+    if (args.category) {
+      const cat = args.category.toLowerCase();
+      results = results.filter(
+        (r) =>
+          Array.isArray(r.categories) &&
+          r.categories.map((c) => String(c).toLowerCase()).includes(cat),
+      );
+    }
+
+    // Optional text search
     if (search) {
       results = results.filter((r) => {
         const pn = String(r.pokemonName || "").toLowerCase();
@@ -287,7 +285,11 @@ export const list = query({
     }
 
     // Sort by pokemonId then formOrder
-    results.sort((a, b) => (a.pokemonId - b.pokemonId) || ((a.formOrder ?? 0) - (b.formOrder ?? 0)));
+    results.sort(
+      (a, b) =>
+        a.pokemonId - b.pokemonId ||
+        (a.formOrder ?? 0) - (b.formOrder ?? 0),
+    );
 
     const page = results.slice(offset, offset + limit);
     return {

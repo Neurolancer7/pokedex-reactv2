@@ -102,10 +102,29 @@ const schema = defineSchema(
         officialArtwork: v.optional(v.string()),
       }),
       versionGroup: v.optional(v.string()),
+      // Add: species id (national dex id) for the form document
+      speciesId: v.optional(v.number()),
+
+      // Add: optional fields used by the forms crawler and for indexing/filtering
+      generation: v.optional(v.number()),
+      isMega: v.optional(v.boolean()),
+      isGigantamax: v.optional(v.boolean()),
+      isRegional: v.optional(v.boolean()),
+      isGender: v.optional(v.boolean()),
+      isCosmetic: v.optional(v.boolean()),
+      isAlternate: v.optional(v.boolean()),
     })
       .index("by_form_id", ["formId"])
       .index("by_pokemon_id", ["pokemonId"])
-      .index("by_pokemon_name", ["pokemonName"]),
+      .index("by_pokemon_name", ["pokemonName"])
+      // Add: indexes to support fast lookups for each category and generation
+      .index("by_generation", ["generation"])
+      .index("by_isMega", ["isMega"])
+      .index("by_isGigantamax", ["isGigantamax"])
+      .index("by_isRegional", ["isRegional"])
+      .index("by_isGender", ["isGender"])
+      .index("by_isCosmetic", ["isCosmetic"])
+      .index("by_isAlternate", ["isAlternate"]),
   },
   {
     schemaValidation: false,

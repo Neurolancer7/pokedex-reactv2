@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+// removed unused @tanstack/react-query imports
 import { AlertCircle, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 

@@ -3,6 +3,14 @@ import { query, mutation } from "./_generated/server";
 import { getCurrentUser } from "./users";
 import type { Doc } from "./_generated/dataModel";
 
+// Add: Canonical species IDs with regional variants (Alolan, Galarian, Hisuian, Paldean)
+const REGIONAL_SPECIES: ReadonlySet<number> = new Set<number>([
+  19, 20, 26, 27, 28, 37, 38, 50, 51, 52, 53, 58, 59, 74, 75, 76, 77, 78, 79,
+  80, 83, 88, 89, 100, 101, 103, 105, 110, 122, 128, 144, 145, 146, 157, 194,
+  199, 211, 215, 222, 263, 264, 503, 549, 554, 555, 562, 570, 571, 618, 628,
+  705, 706, 713, 724,
+]);
+
 // Get paginated list of Pokemon with validation and error handling
 export const list = query({
   args: {
@@ -92,21 +100,54 @@ export const list = query({
         );
       }
 
-      // Add: Apply forms filter (checks stored formTags)
+      // Add: Apply forms filter (checks stored formTags) + fallback to forms cache
       if (forms.length > 0) {
         const normalized = forms.map((f) => f.toLowerCase());
+
+        // Preload forms cache once to ensure accurate filtering even if base tags aren't merged yet
+        const formRows = await ctx.db.query("pokemonForms").collect();
+        const anyFormsIds = new Set<number>(formRows.map((r) => r.pokemonId));
+
+        const matchesCategory = (r: any, wanted: Set<string>) => {
+          const cats = Array.isArray(r.categories)
+            ? r.categories.map((c: any) => String(c).toLowerCase())
+            : [];
+          // TS fix: type the callback param
+          if (cats.some((c: string) => wanted.has(c))) return true;
+          // fallback on boolean flags if present
+          return (
+            (wanted.has("regional") && r.isRegional === true) ||
+            (wanted.has("mega") && r.isMega === true) ||
+            (wanted.has("gigantamax") && r.isGigantamax === true) ||
+            (wanted.has("gender") && r.isGender === true) ||
+            (wanted.has("cosmetic") && r.isCosmetic === true) ||
+            (wanted.has("alternate") && r.isAlternate === true)
+          );
+        };
+
         if (normalized.includes("any") || normalized.includes("all-forms")) {
-          // "All Forms": include Pokémon that have any form tag
+          // Include Pokémon that either already have tags or appear in the forms cache
           results = results.filter((pokemon) => {
             const tags: string[] = Array.isArray(pokemon.formTags) ? pokemon.formTags : [];
-            return tags.length > 0;
+            return tags.length > 0 || anyFormsIds.has(pokemon.pokemonId);
           });
         } else {
           // Specific categories
+          const wanted = new Set<string>(normalized);
+          const specificIds = new Set<number>();
+          for (const r of formRows) {
+            if (matchesCategory(r, wanted)) specificIds.add(r.pokemonId);
+          }
+
+          // Add: ensure Regional Forms include the canonical species set even if forms cache isn't complete yet
+          if (wanted.has("regional")) {
+            for (const id of REGIONAL_SPECIES) specificIds.add(id);
+          }
+
           results = results.filter((pokemon) => {
             const tags: string[] = Array.isArray(pokemon.formTags) ? pokemon.formTags : [];
             const lowerTags = tags.map((t) => t.toLowerCase());
-            return normalized.some((f) => lowerTags.includes(f));
+            return lowerTags.some((t) => wanted.has(t)) || specificIds.has(pokemon.pokemonId);
           });
         }
       }
