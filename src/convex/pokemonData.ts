@@ -38,7 +38,8 @@ export const fetchAndCachePokemon = action({
           batch.map(async (pokemonId) => {
             // Skip if already cached
             const existing = await ctx.runQuery(internal.pokemonInternal.getByIdInternal, { pokemonId });
-            if (existing) return;
+            // Only skip if already cached and has form tags populated
+            if (existing && Array.isArray((existing as any).formTags) && (existing as any).formTags.length > 0) return;
 
             // Construct endpoints directly by id and fetch both in parallel
             const pokemonUrl = `https://pokeapi.co/api/v2/pokemon/${pokemonId}`;

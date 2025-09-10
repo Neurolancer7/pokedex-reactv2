@@ -11,6 +11,8 @@ export const list = query({
     search: v.optional(v.string()),
     types: v.optional(v.array(v.string())),
     generation: v.optional(v.number()),
+    // Add: forms filter (categories)
+    forms: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     try {
@@ -27,6 +29,7 @@ export const list = query({
       // Normalize filters
       const search = args.search?.trim();
       const types = (args.types ?? []).map((t) => t.toLowerCase());
+      const forms = (args.forms ?? []).map((f) => f.toLowerCase());
       const hasValidNumber =
         typeof args.generation === "number" &&
         Number.isFinite(args.generation);
@@ -87,6 +90,15 @@ export const list = query({
         results = results.filter((pokemon) =>
           pokemon.types.some((t: string) => types.includes(t.toLowerCase())),
         );
+      }
+
+      // Add: Apply forms filter (checks stored formTags)
+      if (forms.length > 0) {
+        results = results.filter((pokemon) => {
+          const tags: string[] = Array.isArray(pokemon.formTags) ? pokemon.formTags : [];
+          const lowerTags = tags.map((t) => t.toLowerCase());
+          return forms.some((f) => lowerTags.includes(f));
+        });
       }
 
       // Sort by Pokemon ID

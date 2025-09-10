@@ -84,6 +84,7 @@ export default function Pokedex() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedGeneration, setSelectedGeneration] = useState<number>();
+  const [selectedFormCategory, setSelectedFormCategory] = useState<string | undefined>(undefined);
   const [showFavorites, setShowFavorites] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -122,6 +123,7 @@ export default function Pokedex() {
     search: searchQuery || undefined,
     types: selectedTypes.length > 0 ? selectedTypes : undefined,
     generation: selectedGeneration,
+    forms: selectedFormCategory ? [selectedFormCategory] : undefined,
   });
 
   // Prefetch next page to make clicking "Load More" feel instant
@@ -131,6 +133,7 @@ export default function Pokedex() {
     search: searchQuery || undefined,
     types: selectedTypes.length > 0 ? selectedTypes : undefined,
     generation: selectedGeneration,
+    forms: selectedFormCategory ? [selectedFormCategory] : undefined,
   });
 
   const favorites = useConvexQuery(
@@ -162,7 +165,7 @@ export default function Pokedex() {
     setSearchQuery(query);
   };
 
-  const handleFilterChange = (filters: { types: string[]; generation?: number }) => {
+  const handleFilterChange = (filters: { types: string[]; generation?: number; formCategory?: string }) => {
     // Immediately reset pagination on filter changes to avoid race conditions
     setItems([]);
     setOffset(0);
@@ -171,6 +174,7 @@ export default function Pokedex() {
 
     setSelectedTypes(filters.types);
     setSelectedGeneration(filters.generation);
+    setSelectedFormCategory(filters.formCategory);
   };
 
   const handleFavoriteToggle = async (pokemonId: number) => {
@@ -286,7 +290,7 @@ export default function Pokedex() {
     setOffset(0);
     setHasMore(true);
     setIsLoadingMore(false);
-  }, [searchQuery, selectedGeneration, showFavorites, selectedTypes.join(",")]);
+  }, [searchQuery, selectedGeneration, showFavorites, selectedTypes.join(","), selectedFormCategory || ""]);
 
   // Append new page results
   useEffect(() => {
@@ -370,6 +374,7 @@ export default function Pokedex() {
                 searchQuery={searchQuery}
                 selectedTypes={selectedTypes}
                 selectedGeneration={selectedGeneration}
+                selectedFormCategory={selectedFormCategory}
               />
             </motion.div>
           )}
@@ -433,7 +438,7 @@ export default function Pokedex() {
 
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
             <PokemonGrid
-              key={`${showFavorites ? "fav" : "infinite"}-${selectedGeneration ?? "all"}-${selectedTypes.join(",")}-${searchQuery}`}
+              key={`${showFavorites ? "fav" : "infinite"}-${selectedGeneration ?? "all"}-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
               pokemon={displayPokemon}
               favorites={favoriteIds}
               onFavoriteToggle={handleFavoriteToggle}

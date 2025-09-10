@@ -56,6 +56,8 @@ const schema = defineSchema(
       }),
       moves: v.array(v.string()),
       generation: v.number(),
+      // Add: tags for forms filtering
+      formTags: v.optional(v.array(v.string())),
     }).index("by_pokemon_id", ["pokemonId"])
       .index("by_name", ["name"])
       .index("by_generation", ["generation"]),

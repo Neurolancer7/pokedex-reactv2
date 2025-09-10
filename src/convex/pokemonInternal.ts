@@ -80,6 +80,8 @@ export const cachePokemon = internalMutation({
               .filter((x: unknown): x is string => typeof x === "string")
           : [],
         generation: getGenerationFromId(Number(pokemonData.id)),
+        // Add: computed form tags
+        formTags: getFormTags(pokemonData, speciesData),
       };
 
       if (existingPokemon) {
@@ -180,6 +182,51 @@ export const cacheType = internalMutation({
     }
   },
 });
+
+// Add: helper to derive form tags from PokeAPI data
+function getFormTags(pokemonData: any, speciesData: any): string[] {
+  try {
+    const tags: Set<string> = new Set();
+    const name: string = String(pokemonData?.name ?? "").toLowerCase();
+
+    // Mega evolutions
+    if (name.includes("mega")) {
+      tags.add("mega");
+    }
+
+    // Gigantamax
+    if (name.includes("gmax") || name.includes("gigantamax")) {
+      tags.add("gigantamax");
+    }
+
+    // Regional forms (common region suffixes in names)
+    const regionalHints = ["alola", "alolan", "galar", "galarian", "hisui", "hisuian", "paldea", "paldean"];
+    if (regionalHints.some((r) => name.includes(r))) {
+      tags.add("regional");
+    }
+
+    // Gender differences from species data
+    if (speciesData?.has_gender_differences) {
+      tags.add("gender");
+    }
+
+    // Cosmetic forms: forms_switchable often indicates cosmetic/form changes not strictly battle-only
+    if (speciesData?.forms_switchable && !tags.has("mega") && !tags.has("gigantamax")) {
+      tags.add("cosmetic");
+    }
+
+    // Alternate forms: multiple varieties beyond default where not mega/gmax/regional
+    const varieties: Array<any> = Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
+    const altCount = varieties.filter((v) => !v?.is_default).length;
+    if (altCount > 0 && !tags.has("mega") && !tags.has("gigantamax") && !tags.has("regional")) {
+      tags.add("alternate");
+    }
+
+    return Array.from(tags);
+  } catch {
+    return [];
+  }
+}
 
 function getGenerationFromId(id: number): number {
   if (id <= 151) return 1;

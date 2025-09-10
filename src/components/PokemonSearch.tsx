@@ -23,10 +23,12 @@ interface PokemonSearchProps {
   onFilterChange: (filters: {
     types: string[];
     generation?: number;
+    formCategory?: string;
   }) => void;
   searchQuery: string;
   selectedTypes: string[];
   selectedGeneration?: number;
+  selectedFormCategory?: string;
 }
 
 export function PokemonSearch({
@@ -35,6 +37,7 @@ export function PokemonSearch({
   searchQuery,
   selectedTypes,
   selectedGeneration,
+  selectedFormCategory,
 }: PokemonSearchProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
 
@@ -54,6 +57,7 @@ export function PokemonSearch({
     onFilterChange({
       types: newTypes,
       generation: selectedGeneration,
+      formCategory: selectedFormCategory,
     });
   };
 
@@ -61,14 +65,32 @@ export function PokemonSearch({
     onFilterChange({
       types: selectedTypes,
       generation: generation === "all" ? undefined : parseInt(generation),
+      formCategory: selectedFormCategory,
+    });
+  };
+
+  const handleFormsChange = (value: string) => {
+    onFilterChange({
+      types: selectedTypes,
+      generation: selectedGeneration,
+      formCategory: value === "all" ? undefined : value,
     });
   };
 
   const clearFilters = () => {
-    onFilterChange({ types: [], generation: undefined });
+    onFilterChange({ types: [], generation: undefined, formCategory: undefined });
   };
 
-  const hasActiveFilters = selectedTypes.length > 0 || selectedGeneration;
+  const hasActiveFilters = selectedTypes.length > 0 || selectedGeneration || selectedFormCategory;
+
+  const FORM_OPTIONS: Array<{ value: string; label: string }> = [
+    { value: "regional", label: "Regional Forms" },
+    { value: "alternate", label: "Alternate Forms" },
+    { value: "mega", label: "Mega Evolutions" },
+    { value: "gigantamax", label: "Gigantamax Forms" },
+    { value: "gender", label: "Gender Differences" },
+    { value: "cosmetic", label: "Cosmetic Forms" },
+  ];
 
   return (
     <div className="space-y-4">
@@ -141,6 +163,26 @@ export function PokemonSearch({
             </div>
           </PopoverContent>
         </Popover>
+
+        {/* Add: Forms Filter */}
+        <div className="shrink-0">
+          <Select
+            value={selectedFormCategory || "all"}
+            onValueChange={handleFormsChange}
+          >
+            <SelectTrigger className="w-40 sm:w-48">
+              <SelectValue placeholder="Forms" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Forms</SelectItem>
+              {FORM_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* Clear Filters */}
         {hasActiveFilters && (
