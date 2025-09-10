@@ -13,7 +13,7 @@ export const processChunk = internalAction({
     const ids = args.ids.filter((id) => Number.isFinite(id) && id > 0 && id <= 1025);
     if (ids.length === 0) return;
 
-    const CONCURRENCY = 8;
+    const CONCURRENCY = 4;
 
     for (let i = 0; i < ids.length; i += CONCURRENCY) {
       const batch = ids.slice(i, i + CONCURRENCY);
@@ -70,6 +70,188 @@ export const processChunk = internalAction({
   },
 });
 
+// Add: background internal action to cache types without blocking the main action
+export const processTypes = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    try {
+      await cacheTypes(ctx);
+    } catch (e) {
+      console.error("processTypes error:", e);
+    }
+  },
+});
+
+// Add: background internal action to fan-out chunk processing so main action returns immediately
+export const processAll = internalAction({
+  args: { ids: v.array(v.number()) },
+  handler: async (ctx, args) => {
+    const ids = args.ids.filter((id) => Number.isFinite(id) && id > 0 && id <= 1025);
+    if (ids.length === 0) return;
+
+    const CHUNK_SIZE = 20;
+    const schedules: Array<Promise<any>> = [];
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+      const chunk = ids.slice(i, i + CHUNK_SIZE);
+      schedules.push(ctx.scheduler.runAfter(0, internal.pokemonData.processChunk, { ids: chunk }));
+    }
+    await Promise.allSettled(schedules);
+  },
+});
+
+// Helper: classification for forms
+function classifyFormCategories(
+  form: any,
+  fallbackName?: string,
+): string[] {
+  try {
+    const tags: Set<string> = new Set();
+    const name = String(form?.name ?? fallbackName ?? "").toLowerCase();
+    const formName = String(form?.form_name ?? "").toLowerCase();
+
+    // Priority: mega > gigantamax > regional > gender > cosmetic > alternate
+    if (form?.is_mega === true || name.includes("mega") || formName.includes("mega")) {
+      tags.add("mega");
+    }
+
+    if (formName.includes("gmax") || formName.includes("gigantamax") || name.includes("gmax") || name.includes("gigantamax")) {
+      tags.add("gigantamax");
+    }
+
+    const regionalHints = ["alola", "alolan", "galar", "galarian", "hisui", "hisuian", "paldea", "paldean"];
+    if (regionalHints.some((t) => name.includes(t)) || regionalHints.some((t) => formName.includes(t))) {
+      tags.add("regional");
+    }
+
+    if (
+      name.includes("male") || name.includes("female") ||
+      name.endsWith("-m") || name.endsWith("-f") ||
+      formName.includes("male") || formName.includes("female")
+    ) {
+      tags.add("gender");
+    }
+
+    const hasPrimary = tags.has("mega") || tags.has("gigantamax") || tags.has("regional") || tags.has("gender");
+    if (!hasPrimary) {
+      // Cosmetic forms are non-battle-only forms that alter appearance/names
+      const isCosmeticCandidate = Boolean(formName) && form?.is_battle_only === false;
+      if (isCosmeticCandidate) {
+        tags.add("cosmetic");
+      }
+    }
+
+    if (tags.size === 0) {
+      tags.add("alternate");
+    }
+
+    return Array.from(tags);
+  } catch {
+    return ["alternate"];
+  }
+}
+
+// Internal action: process a single page of /pokemon-form list
+export const crawlFormsProcessPage = internalAction({
+  args: { offset: v.number(), limit: v.number() },
+  handler: async (ctx, args) => {
+    const { offset, limit } = args;
+    const listUrl = `https://pokeapi.co/api/v2/pokemon-form?limit=${limit}&offset=${offset}`;
+    try {
+      const res = await fetch(listUrl);
+      if (!res.ok) {
+        throw new Error(`pokemon-form list failed ${res.status} ${res.statusText}`);
+      }
+      const data = await res.json();
+      const items: Array<{ name: string; url: string }> = Array.isArray(data?.results) ? data.results : [];
+
+      const CONCURRENCY = 4;
+      for (let i = 0; i < items.length; i += CONCURRENCY) {
+        const batch = items.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          batch.map(async (it) => {
+            try {
+              const formDetailRes = await fetch(it.url);
+              if (!formDetailRes.ok) {
+                throw new Error(`pokemon-form details failed ${formDetailRes.status} ${formDetailRes.statusText}`);
+              }
+              const form = await formDetailRes.json();
+
+              const formId = Number(form?.id);
+              const formName = String(form?.form_name ?? "");
+              const pokemonName = String(form?.pokemon?.name ?? it.name);
+              // Derive pokemonId from the URL reference
+              const pokemonUrl: string = String(form?.pokemon?.url ?? "");
+              const pokemonId = Number(pokemonUrl.split("/").slice(-2, -1)[0]);
+
+              if (!Number.isFinite(pokemonId) || pokemonId <= 0) return;
+
+              // Build sprite URLs with known patterns to avoid extra fetches
+              const sprites = {
+                frontDefault: String(form?.sprites?.front_default ?? `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`),
+                frontShiny: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/${pokemonId}.png`,
+                officialArtwork: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${pokemonId}.png`,
+              };
+
+              const categories = classifyFormCategories(form, it.name);
+
+              await ctx.runMutation(internal.pokemonInternal.upsertForm, {
+                formId,
+                formName,
+                pokemonName,
+                pokemonId,
+                categories,
+                isDefault: Boolean(form?.is_default),
+                isBattleOnly: Boolean(form?.is_battle_only),
+                formOrder: typeof form?.form_order === "number" ? form.form_order : undefined,
+                sprites,
+                versionGroup: String(form?.version_group?.name ?? ""),
+              });
+
+              await ctx.runMutation(internal.pokemonInternal.mergeFormTagsIntoPokemon, {
+                pokemonId,
+                categories,
+              });
+            } catch (e) {
+              console.error("crawlFormsProcessPage item error:", e);
+            }
+          }),
+        );
+      }
+    } catch (e) {
+      console.error("crawlFormsProcessPage error:", e);
+      // best-effort; do not throw to keep the background job resilient
+    }
+  },
+});
+
+// Internal action: enumerate all pages and fan out processing
+export const crawlForms = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    try {
+      const headRes = await fetch("https://pokeapi.co/api/v2/pokemon-form?limit=1&offset=0");
+      if (!headRes.ok) throw new Error(`pokemon-form head failed ${headRes.status} ${headRes.statusText}`);
+      const head = await headRes.json();
+      const count = Number(head?.count ?? 0);
+      if (!Number.isFinite(count) || count <= 0) return;
+
+      const PAGE = 200;
+      const schedules: Array<Promise<any>> = [];
+      for (let offset = 0; offset < count; offset += PAGE) {
+        schedules.push(
+          ctx.scheduler.runAfter(0, internal.pokemonData.crawlFormsProcessPage, {
+            offset,
+            limit: Math.min(PAGE, count - offset),
+          }),
+        );
+      }
+      await Promise.allSettled(schedules);
+    } catch (e) {
+      console.error("crawlForms error:", e);
+    }
+  },
+});
+
 // Action to fetch and cache Pokemon data from PokeAPI
 export const fetchAndCachePokemon = action({
   args: { 
@@ -83,18 +265,17 @@ export const fetchAndCachePokemon = action({
     try {
       const ids: number[] = Array.from({ length: limit }, (_, i) => offset + i + 1).filter((id) => id <= 1025);
       if (ids.length === 0) {
+        // Still schedule forms + types to keep cache healthy
+        await ctx.scheduler.runAfter(0, internal.pokemonData.processTypes, {});
+        await ctx.scheduler.runAfter(0, internal.pokemonData.crawlForms, {});
         return { success: true, scheduled: 0, cached: 0 };
       }
 
-      // Ensure types are cached once up front
-      await cacheTypes(ctx);
-
-      // Schedule background processing in small chunks to avoid client timeouts
-      const CHUNK_SIZE = 40;
-      for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
-        const chunk = ids.slice(i, i + CHUNK_SIZE);
-        await ctx.scheduler.runAfter(0, internal.pokemonData.processChunk, { ids: chunk });
-      }
+      // Schedule types caching & full processing in the background to avoid client timeouts
+      await ctx.scheduler.runAfter(0, internal.pokemonData.processTypes, {});
+      await ctx.scheduler.runAfter(0, internal.pokemonData.processAll, { ids });
+      // New: schedule a full forms crawl in the background
+      await ctx.scheduler.runAfter(0, internal.pokemonData.crawlForms, {});
 
       // Return immediately; background jobs will complete shortly
       return { success: true, scheduled: ids.length, cached: ids.length };

@@ -204,7 +204,7 @@ function getFormTags(pokemonData: any, speciesData: any, formData?: any): string
       tags.add("regional");
     }
 
-    // Use formData for precise flags
+    // Use formData for precise flags on the current form
     if (formData && typeof formData === "object") {
       if (formData.is_mega === true) {
         tags.add("mega");
@@ -213,14 +213,13 @@ function getFormTags(pokemonData: any, speciesData: any, formData?: any): string
       if (formName.includes("gmax") || formName.includes("gigantamax")) {
         tags.add("gigantamax");
       }
-      // Sometimes regional forms have region hints in the form_name
       const regionalHints = ["alola", "alolan", "galar", "galarian", "hisui", "hisuian", "paldea", "paldean"];
       if (regionalHints.some((r) => formName.includes(r))) {
         tags.add("regional");
       }
     }
 
-    // Name-based fallbacks
+    // Name-based fallbacks (rare, but included)
     if (name.includes("mega")) {
       tags.add("mega");
     }
@@ -232,6 +231,22 @@ function getFormTags(pokemonData: any, speciesData: any, formData?: any): string
       tags.add("regional");
     }
 
+    // Species-level detection from varieties:
+    // If ANY variety name indicates mega/gmax/regional, tag the base species accordingly.
+    const varieties: Array<any> = Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
+    for (const v of varieties) {
+      const vName = String(v?.pokemon?.name ?? "").toLowerCase();
+      if (vName.includes("mega")) {
+        tags.add("mega");
+      }
+      if (vName.includes("gmax") || vName.includes("gigantamax")) {
+        tags.add("gigantamax");
+      }
+      if (regionalHints.some((r) => vName.includes(r))) {
+        tags.add("regional");
+      }
+    }
+
     if (speciesData?.has_gender_differences) {
       tags.add("gender");
     }
@@ -240,7 +255,6 @@ function getFormTags(pokemonData: any, speciesData: any, formData?: any): string
       tags.add("cosmetic");
     }
 
-    const varieties: Array<any> = Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
     const altCount = varieties.filter((v) => !v?.is_default).length;
     if (altCount > 0 && !tags.has("mega") && !tags.has("gigantamax") && !tags.has("regional")) {
       tags.add("alternate");
@@ -251,6 +265,102 @@ function getFormTags(pokemonData: any, speciesData: any, formData?: any): string
     return [];
   }
 }
+
+// Add: Upsert a canonical form row
+export const upsertForm = internalMutation({
+  args: {
+    formId: v.number(),
+    formName: v.optional(v.string()),
+    pokemonName: v.string(),
+    pokemonId: v.number(),
+    categories: v.array(v.string()),
+    isDefault: v.boolean(),
+    isBattleOnly: v.boolean(),
+    formOrder: v.optional(v.number()),
+    sprites: v.object({
+      frontDefault: v.optional(v.string()),
+      frontShiny: v.optional(v.string()),
+      officialArtwork: v.optional(v.string()),
+    }),
+    versionGroup: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const existing = await ctx.db
+        .query("pokemonForms")
+        .withIndex("by_form_id", (q) => q.eq("formId", args.formId))
+        .collect();
+
+      if (existing.length > 0) {
+        const doc = existing[0];
+        await ctx.db.patch(doc._id, {
+          formName: args.formName,
+          pokemonName: args.pokemonName,
+          pokemonId: args.pokemonId,
+          categories: args.categories,
+          isDefault: args.isDefault,
+          isBattleOnly: args.isBattleOnly,
+          formOrder: args.formOrder,
+          sprites: args.sprites,
+          versionGroup: args.versionGroup,
+        });
+      } else {
+        await ctx.db.insert("pokemonForms", {
+          formId: args.formId,
+          formName: args.formName,
+          pokemonName: args.pokemonName,
+          pokemonId: args.pokemonId,
+          categories: args.categories,
+          isDefault: args.isDefault,
+          isBattleOnly: args.isBattleOnly,
+          formOrder: args.formOrder,
+          sprites: args.sprites,
+          versionGroup: args.versionGroup,
+        });
+      }
+      return null;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unknown error in pokemonInternal.upsertForm";
+      console.error("upsertForm error:", err);
+      throw new Error(message);
+    }
+  },
+});
+
+// Add: Merge discovered form categories into the base Pokémon's formTags
+export const mergeFormTagsIntoPokemon = internalMutation({
+  args: {
+    pokemonId: v.number(),
+    categories: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const base = await ctx.db
+        .query("pokemon")
+        .withIndex("by_pokemon_id", (q) => q.eq("pokemonId", args.pokemonId))
+        .collect();
+      if (base.length === 0) {
+        // Base entry might not be cached yet; skip
+        return null;
+      }
+      const doc = base[0];
+      const existing: string[] = Array.isArray(doc.formTags) ? doc.formTags : [];
+      const merged = Array.from(new Set([...existing, ...args.categories.map((c) => c.toLowerCase())]));
+      if (merged.length !== existing.length) {
+        await ctx.db.patch(doc._id, { formTags: merged });
+      }
+      return null;
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Unknown error in pokemonInternal.mergeFormTagsIntoPokemon";
+      console.error("mergeFormTagsIntoPokemon error:", err);
+      throw new Error(message);
+    }
+  },
+});
 
 function getGenerationFromId(id: number): number {
   if (id <= 151) return 1;

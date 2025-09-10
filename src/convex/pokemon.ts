@@ -94,11 +94,21 @@ export const list = query({
 
       // Add: Apply forms filter (checks stored formTags)
       if (forms.length > 0) {
-        results = results.filter((pokemon) => {
-          const tags: string[] = Array.isArray(pokemon.formTags) ? pokemon.formTags : [];
-          const lowerTags = tags.map((t) => t.toLowerCase());
-          return forms.some((f) => lowerTags.includes(f));
-        });
+        const normalized = forms.map((f) => f.toLowerCase());
+        if (normalized.includes("any") || normalized.includes("all-forms")) {
+          // "All Forms": include Pokémon that have any form tag
+          results = results.filter((pokemon) => {
+            const tags: string[] = Array.isArray(pokemon.formTags) ? pokemon.formTags : [];
+            return tags.length > 0;
+          });
+        } else {
+          // Specific categories
+          results = results.filter((pokemon) => {
+            const tags: string[] = Array.isArray(pokemon.formTags) ? pokemon.formTags : [];
+            const lowerTags = tags.map((t) => t.toLowerCase());
+            return normalized.some((f) => lowerTags.includes(f));
+          });
+        }
       }
 
       // Sort by Pokemon ID

@@ -15,6 +15,7 @@ import type {
 } from "convex/server";
 import type * as auth_emailOtp from "../auth/emailOtp.js";
 import type * as auth from "../auth.js";
+import type * as forms from "../forms.js";
 import type * as http from "../http.js";
 import type * as pokemon from "../pokemon.js";
 import type * as pokemonData from "../pokemonData.js";
@@ -33,6 +34,7 @@ import type * as usersActions from "../usersActions.js";
 declare const fullApi: ApiFromModules<{
   "auth/emailOtp": typeof auth_emailOtp;
   auth: typeof auth;
+  forms: typeof forms;
   http: typeof http;
   pokemon: typeof pokemon;
   pokemonData: typeof pokemonData;

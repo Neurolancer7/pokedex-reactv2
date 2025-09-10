@@ -85,6 +85,27 @@ const schema = defineSchema(
       pokemonId: v.number(),
     }).index("by_user", ["userId"])
       .index("by_user_and_pokemon", ["userId", "pokemonId"]),
+
+    // Add: Table to cache all Pokémon canonical forms from PokeAPI
+    pokemonForms: defineTable({
+      formId: v.number(),
+      formName: v.optional(v.string()),
+      pokemonName: v.string(), // canonical variant name from PokeAPI (e.g., "vulpix-alola")
+      pokemonId: v.number(),   // national dex id
+      categories: v.array(v.string()), // ["regional", "mega", "gigantamax", "gender", "cosmetic", "alternate"]
+      isDefault: v.boolean(),
+      isBattleOnly: v.boolean(),
+      formOrder: v.optional(v.number()),
+      sprites: v.object({
+        frontDefault: v.optional(v.string()),
+        frontShiny: v.optional(v.string()),
+        officialArtwork: v.optional(v.string()),
+      }),
+      versionGroup: v.optional(v.string()),
+    })
+      .index("by_form_id", ["formId"])
+      .index("by_pokemon_id", ["pokemonId"])
+      .index("by_pokemon_name", ["pokemonName"]),
   },
   {
     schemaValidation: false,

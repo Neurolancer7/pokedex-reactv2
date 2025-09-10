@@ -174,7 +174,10 @@ export function PokemonSearch({
               <SelectValue placeholder="Forms" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Forms</SelectItem>
+              {/* New: real "All Forms" union filter */}
+              <SelectItem value="any">All Forms</SelectItem>
+              {/* Renamed: clear/no filter option */}
+              <SelectItem value="all">No Forms Filter</SelectItem>
               {FORM_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
