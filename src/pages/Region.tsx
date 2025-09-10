@@ -13,6 +13,7 @@ import { useQuery as useConvexQuery, useMutation as useConvexMutation } from "co
 import { PokemonHeader } from "@/components/PokemonHeader";
 import { PokemonGrid } from "@/components/PokemonGrid";
 import { POKEMON_GENERATIONS } from "@/lib/pokemon-api";
+import type { Pokemon } from "@/lib/pokemon-api";
 
 export default function Region() {
   const { gen } = useParams();
@@ -56,6 +57,26 @@ export default function Region() {
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
   const isLoading = regionData === undefined;
   const displayPokemon = regionData?.pokemon ?? [];
+
+  // Normalize results to full Pokemon objects for the grid
+  const normalizedRegionPokemon: Pokemon[] = (displayPokemon as any[]).map((p: any) => ({
+    pokemonId: Number(p?.pokemonId ?? 0),
+    name: String(p?.name ?? ""),
+    height: Number(p?.height ?? 0),
+    weight: Number(p?.weight ?? 0),
+    baseExperience: typeof p?.baseExperience === "number" ? p.baseExperience : undefined,
+    types: Array.isArray(p?.types) ? p.types : [],
+    abilities: Array.isArray(p?.abilities) ? p.abilities : [],
+    stats: Array.isArray(p?.stats) ? p.stats : [],
+    sprites: {
+      frontDefault: p?.sprites?.frontDefault,
+      frontShiny: p?.sprites?.frontShiny,
+      officialArtwork: p?.sprites?.officialArtwork,
+    },
+    moves: Array.isArray(p?.moves) ? p.moves : [],
+    generation: Number(p?.generation ?? 1),
+    species: p?.species,
+  }));
 
   // Derive total pages
   const totalItems = regionData?.total ?? 0;
@@ -133,7 +154,7 @@ export default function Region() {
 
         <PokemonGrid
           key={`region-${generation ?? 'all'}-${page}`} // Force re-render on page/gen change
-          pokemon={displayPokemon}
+          pokemon={normalizedRegionPokemon}
           favorites={favoriteIds}
           onFavoriteToggle={onFavoriteToggle}
           isLoading={isLoading}

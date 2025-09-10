@@ -8,6 +8,7 @@ import { useNavigate } from "react-router";
 import { useQuery as useConvexQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { PokemonGrid } from "@/components/PokemonGrid";
+import type { Pokemon } from "@/lib/pokemon-api";
 import { useEffect, useState } from "react";
 
 const LANDING_FEATURES = [
@@ -76,6 +77,26 @@ export default function Landing() {
     limit: 20,
     offset: 0,
   });
+
+  // Normalize results to full Pokemon objects for the grid
+  const normalizedLandingPokemon: Pokemon[] = (pokemonData?.pokemon ?? []).map((p: any) => ({
+    pokemonId: Number(p?.pokemonId ?? 0),
+    name: String(p?.name ?? ""),
+    height: Number(p?.height ?? 0),
+    weight: Number(p?.weight ?? 0),
+    baseExperience: typeof p?.baseExperience === "number" ? p.baseExperience : undefined,
+    types: Array.isArray(p?.types) ? p.types : [],
+    abilities: Array.isArray(p?.abilities) ? p.abilities : [],
+    stats: Array.isArray(p?.stats) ? p.stats : [],
+    sprites: {
+      frontDefault: p?.sprites?.frontDefault,
+      frontShiny: p?.sprites?.frontShiny,
+      officialArtwork: p?.sprites?.officialArtwork,
+    },
+    moves: Array.isArray(p?.moves) ? p.moves : [],
+    generation: Number(p?.generation ?? 1),
+    species: p?.species,
+  }));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
@@ -259,7 +280,7 @@ export default function Landing() {
         </div>
 
         <PokemonGrid
-          pokemon={pokemonData?.pokemon ?? []}
+          pokemon={normalizedLandingPokemon}
           favorites={[]} // favorites not shown on landing
           isLoading={pokemonData === undefined}
         />
