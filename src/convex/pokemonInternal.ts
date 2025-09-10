@@ -27,10 +27,12 @@ export const cachePokemon = internalMutation({
   args: {
     pokemonData: v.any(),
     speciesData: v.any(),
+    // Add: formData for better form detection
+    formData: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     try {
-      const { pokemonData, speciesData } = args;
+      const { pokemonData, speciesData, formData } = args;
 
       // Upsert Pokemon (avoid creating duplicates)
       const existingPokemonArr = await ctx.db
@@ -80,8 +82,8 @@ export const cachePokemon = internalMutation({
               .filter((x: unknown): x is string => typeof x === "string")
           : [],
         generation: getGenerationFromId(Number(pokemonData.id)),
-        // Add: computed form tags
-        formTags: getFormTags(pokemonData, speciesData),
+        // Update: compute formTags using optional formData
+        formTags: getFormTags(pokemonData, speciesData, formData),
       };
 
       if (existingPokemon) {
@@ -192,44 +194,52 @@ const REGIONAL_FORM_SPECIES: Set<number> = new Set([
 ]);
 
 // Add: helper to derive form tags from PokeAPI data
-function getFormTags(pokemonData: any, speciesData: any): string[] {
+function getFormTags(pokemonData: any, speciesData: any, formData?: any): string[] {
   try {
     const tags: Set<string> = new Set();
     const name: string = String(pokemonData?.name ?? "").toLowerCase();
 
-    // Add: explicit regional form tagging based on Ndex list provided
     const idNum = Number(pokemonData?.id);
     if (Number.isFinite(idNum) && REGIONAL_FORM_SPECIES.has(idNum)) {
       tags.add("regional");
     }
 
-    // Mega evolutions
+    // Use formData for precise flags
+    if (formData && typeof formData === "object") {
+      if (formData.is_mega === true) {
+        tags.add("mega");
+      }
+      const formName = String(formData.form_name ?? "").toLowerCase();
+      if (formName.includes("gmax") || formName.includes("gigantamax")) {
+        tags.add("gigantamax");
+      }
+      // Sometimes regional forms have region hints in the form_name
+      const regionalHints = ["alola", "alolan", "galar", "galarian", "hisui", "hisuian", "paldea", "paldean"];
+      if (regionalHints.some((r) => formName.includes(r))) {
+        tags.add("regional");
+      }
+    }
+
+    // Name-based fallbacks
     if (name.includes("mega")) {
       tags.add("mega");
     }
-
-    // Gigantamax
     if (name.includes("gmax") || name.includes("gigantamax")) {
       tags.add("gigantamax");
     }
-
-    // Regional forms (common region suffixes in names)
     const regionalHints = ["alola", "alolan", "galar", "galarian", "hisui", "hisuian", "paldea", "paldean"];
     if (regionalHints.some((r) => name.includes(r))) {
       tags.add("regional");
     }
 
-    // Gender differences from species data
     if (speciesData?.has_gender_differences) {
       tags.add("gender");
     }
 
-    // Cosmetic forms
     if (speciesData?.forms_switchable && !tags.has("mega") && !tags.has("gigantamax")) {
       tags.add("cosmetic");
     }
 
-    // Alternate forms: multiple varieties beyond default where not mega/gmax/regional
     const varieties: Array<any> = Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
     const altCount = varieties.filter((v) => !v?.is_default).length;
     if (altCount > 0 && !tags.has("mega") && !tags.has("gigantamax") && !tags.has("regional")) {

@@ -15,7 +15,6 @@ export const fetchAndCachePokemon = action({
     const offset = args.offset || 0;
     
     try {
-      // If a range is provided (limit/offset), build the list of IDs directly to avoid the list endpoint round trip
       const ids: number[] = Array.from({ length: limit }, (_, i) => offset + i + 1).filter((id) => id <= 1025);
 
       // If no ids (edge), return early
@@ -23,10 +22,8 @@ export const fetchAndCachePokemon = action({
         return { success: true, cached: 0 };
       }
 
-      // Cache types first
       await cacheTypes(ctx);
 
-      // Choose concurrency based on region; Paldea (>= 906) gets higher concurrency
       const isPaldeaOnly = ids.every((id) => id >= 906);
       const CONCURRENCY = isPaldeaOnly ? 16 : 8;
       const BATCH_DELAY_MS = isPaldeaOnly ? 50 : 150;
@@ -36,18 +33,17 @@ export const fetchAndCachePokemon = action({
 
         await Promise.all(
           batch.map(async (pokemonId) => {
-            // Skip if already cached
             const existing = await ctx.runQuery(internal.pokemonInternal.getByIdInternal, { pokemonId });
-            // Only skip if already cached and has form tags populated
             if (existing && Array.isArray((existing as any).formTags) && (existing as any).formTags.length > 0) return;
 
-            // Construct endpoints directly by id and fetch both in parallel
             const pokemonUrl = `https://pokeapi.co/api/v2/pokemon/${pokemonId}`;
             const speciesUrl = `https://pokeapi.co/api/v2/pokemon-species/${pokemonId}`;
+            const formUrl = `https://pokeapi.co/api/v2/pokemon-form/${pokemonId}`;
 
-            const [pokemonResponse, speciesResponse] = await Promise.all([
+            const [pokemonResponse, speciesResponse, formResponse] = await Promise.all([
               fetch(pokemonUrl),
               fetch(speciesUrl),
+              fetch(formUrl),
             ]);
 
             if (!pokemonResponse.ok) {
@@ -56,28 +52,35 @@ export const fetchAndCachePokemon = action({
             if (!speciesResponse.ok) {
               throw new Error(`PokéAPI species request failed (id ${pokemonId}): ${speciesResponse.status} ${speciesResponse.statusText}`);
             }
+            // formResponse may 404 for edge cases; handle softly by treating as undefined
+            let formData: any | undefined = undefined;
+            if (formResponse.ok) {
+              try {
+                formData = await formResponse.json();
+              } catch {
+                formData = undefined;
+              }
+            }
 
             const [pokemonData, speciesData] = await Promise.all([
               pokemonResponse.json(),
               speciesResponse.json(),
             ]);
 
-            // Cache Pokemon
             await ctx.runMutation(internal.pokemonInternal.cachePokemon, {
               pokemonData,
               speciesData,
+              formData, // pass through to improve form tag detection
             });
           })
         );
 
-        // Tiny delay between batches to avoid spikes
         await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
       }
       
       return { success: true, cached: ids.length };
     } catch (error) {
       console.error("Error fetching Pokemon data:", error);
-      // Provide clean error message
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to fetch Pokemon data: ${message}`);
     }

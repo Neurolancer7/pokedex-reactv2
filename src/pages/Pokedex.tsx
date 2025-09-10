@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/convex/_generated/api";
@@ -391,6 +391,23 @@ export default function Pokedex() {
                   {showFavorites ? "Your Favorites" : "Pokémon"}
                 </h2>
               </div>
+
+              {!showFavorites && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDataRefresh}
+                    disabled={isRefreshing}
+                    aria-busy={isRefreshing}
+                    aria-label="Update Pokédex data"
+                    className="gap-2"
+                  >
+                    <RotateCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                    <span className="hidden sm:inline">Update Data</span>
+                  </Button>
+                </div>
+              )}
             </div>
           </motion.div>
 
