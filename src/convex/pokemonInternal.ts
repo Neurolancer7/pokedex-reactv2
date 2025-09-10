@@ -183,11 +183,25 @@ export const cacheType = internalMutation({
   },
 });
 
+// Add: explicit regional form species IDs to improve tag accuracy
+const REGIONAL_FORM_SPECIES: Set<number> = new Set([
+  19, 20, 26, 27, 28, 37, 38, 50, 51, 52, 53, 58, 59, 74, 75, 76, 77, 78, 79,
+  80, 83, 88, 89, 100, 101, 103, 105, 110, 122, 128, 144, 145, 146, 157, 194,
+  199, 211, 215, 222, 263, 264, 503, 549, 554, 555, 562, 570, 571, 618, 628,
+  705, 706, 713, 724,
+]);
+
 // Add: helper to derive form tags from PokeAPI data
 function getFormTags(pokemonData: any, speciesData: any): string[] {
   try {
     const tags: Set<string> = new Set();
     const name: string = String(pokemonData?.name ?? "").toLowerCase();
+
+    // Add: explicit regional form tagging based on Ndex list provided
+    const idNum = Number(pokemonData?.id);
+    if (Number.isFinite(idNum) && REGIONAL_FORM_SPECIES.has(idNum)) {
+      tags.add("regional");
+    }
 
     // Mega evolutions
     if (name.includes("mega")) {
@@ -210,7 +224,7 @@ function getFormTags(pokemonData: any, speciesData: any): string[] {
       tags.add("gender");
     }
 
-    // Cosmetic forms: forms_switchable often indicates cosmetic/form changes not strictly battle-only
+    // Cosmetic forms
     if (speciesData?.forms_switchable && !tags.has("mega") && !tags.has("gigantamax")) {
       tags.add("cosmetic");
     }
