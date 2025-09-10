@@ -98,6 +98,8 @@ export default function Pokedex() {
   const autoFetchRef = useRef(false);
   // Track generations we've already attempted to fetch to avoid repeated calls
   const fetchedGenRef = useRef<Set<number>>(new Set());
+  // Track form categories we've attempted to fetch
+  const fetchedFormCategoryRef = useRef<Set<string>>(new Set());
 
   // Generation ID ranges used to auto-fetch when a region is selected but uncached
   const GEN_RANGES: Record<number, { start: number; end: number }> = {
@@ -284,6 +286,33 @@ export default function Pokedex() {
       setIsRefreshing(false);
     });
   }, [selectedGeneration, items.length, showFavorites, fetchPokemonData, isRefreshing]);
+
+  // Auto-fetch full dataset if a Forms category is selected and results are empty (ensures form tags exist)
+  useEffect(() => {
+    if (showFavorites) return;
+    if (!selectedFormCategory) return;
+    if (isRefreshing) return;
+    if (items.length > 0) return;
+    if (fetchedFormCategoryRef.current.has(selectedFormCategory)) return;
+
+    fetchedFormCategoryRef.current.add(selectedFormCategory);
+    setIsRefreshing(true);
+
+    const promise = fetchPokemonData({ limit: 1025, offset: 0 });
+
+    toast.promise(promise, {
+      loading: `Preparing data for "${selectedFormCategory}" forms...`,
+      success: (data) => {
+        const count = (data as any)?.cached ?? 0;
+        return `Data ready! Cached ${count} entries.`;
+      },
+      error: (err) => (err instanceof Error ? err.message : "Failed to backfill form data"),
+    });
+
+    promise.finally(() => {
+      setIsRefreshing(false);
+    });
+  }, [selectedFormCategory, items.length, showFavorites, fetchPokemonData, isRefreshing]);
 
   useEffect(() => {
     setItems([]);
