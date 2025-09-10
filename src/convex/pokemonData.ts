@@ -1,38 +1,26 @@
 "use node";
 
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 
-// Action to fetch and cache Pokemon data from PokeAPI
-export const fetchAndCachePokemon = action({
-  args: { 
-    limit: v.optional(v.number()),
-    offset: v.optional(v.number()) 
+// Add: Internal action to process a chunk of Pokémon IDs in the background
+export const processChunk = internalAction({
+  args: {
+    ids: v.array(v.number()),
   },
   handler: async (ctx, args) => {
-    const limit = args.limit || 151; // First generation by default
-    const offset = args.offset || 0;
-    
-    try {
-      const ids: number[] = Array.from({ length: limit }, (_, i) => offset + i + 1).filter((id) => id <= 1025);
+    const ids = args.ids.filter((id) => Number.isFinite(id) && id > 0 && id <= 1025);
+    if (ids.length === 0) return;
 
-      // If no ids (edge), return early
-      if (ids.length === 0) {
-        return { success: true, cached: 0 };
-      }
+    const CONCURRENCY = 8;
 
-      await cacheTypes(ctx);
+    for (let i = 0; i < ids.length; i += CONCURRENCY) {
+      const batch = ids.slice(i, i + CONCURRENCY);
 
-      const isPaldeaOnly = ids.every((id) => id >= 906);
-      const CONCURRENCY = isPaldeaOnly ? 16 : 8;
-      const BATCH_DELAY_MS = isPaldeaOnly ? 50 : 150;
-
-      for (let i = 0; i < ids.length; i += CONCURRENCY) {
-        const batch = ids.slice(i, i + CONCURRENCY);
-
-        await Promise.all(
-          batch.map(async (pokemonId) => {
+      await Promise.all(
+        batch.map(async (pokemonId) => {
+          try {
             const existing = await ctx.runQuery(internal.pokemonInternal.getByIdInternal, { pokemonId });
             if (existing && Array.isArray((existing as any).formTags) && (existing as any).formTags.length > 0) return;
 
@@ -52,7 +40,7 @@ export const fetchAndCachePokemon = action({
             if (!speciesResponse.ok) {
               throw new Error(`PokéAPI species request failed (id ${pokemonId}): ${speciesResponse.status} ${speciesResponse.statusText}`);
             }
-            // formResponse may 404 for edge cases; handle softly by treating as undefined
+
             let formData: any | undefined = undefined;
             if (formResponse.ok) {
               try {
@@ -70,19 +58,50 @@ export const fetchAndCachePokemon = action({
             await ctx.runMutation(internal.pokemonInternal.cachePokemon, {
               pokemonData,
               speciesData,
-              formData, // pass through to improve form tag detection
+              formData,
             });
-          })
-        );
+          } catch (e) {
+            // Log and continue with other IDs instead of failing the whole chunk
+            console.error(`processChunk error for id ${pokemonId}:`, e);
+          }
+        })
+      );
+    }
+  },
+});
 
-        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
+// Action to fetch and cache Pokemon data from PokeAPI
+export const fetchAndCachePokemon = action({
+  args: { 
+    limit: v.optional(v.number()),
+    offset: v.optional(v.number()) 
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 151;
+    const offset = args.offset || 0;
+
+    try {
+      const ids: number[] = Array.from({ length: limit }, (_, i) => offset + i + 1).filter((id) => id <= 1025);
+      if (ids.length === 0) {
+        return { success: true, scheduled: 0, cached: 0 };
       }
-      
-      return { success: true, cached: ids.length };
+
+      // Ensure types are cached once up front
+      await cacheTypes(ctx);
+
+      // Schedule background processing in small chunks to avoid client timeouts
+      const CHUNK_SIZE = 40;
+      for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+        const chunk = ids.slice(i, i + CHUNK_SIZE);
+        await ctx.scheduler.runAfter(0, internal.pokemonData.processChunk, { ids: chunk });
+      }
+
+      // Return immediately; background jobs will complete shortly
+      return { success: true, scheduled: ids.length, cached: ids.length };
     } catch (error) {
-      console.error("Error fetching Pokemon data:", error);
+      console.error("Error scheduling Pokemon data fetch:", error);
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to fetch Pokemon data: ${message}`);
+      throw new Error(`Failed to schedule Pokemon data fetch: ${message}`);
     }
   },
 });
