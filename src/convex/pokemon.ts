@@ -51,47 +51,75 @@ export const list = query({
 
       let results: any[] = [];
 
-      if (hasValidGeneration) {
-        // First try by_generation index
-        results = await ctx.db
-          .query("pokemon")
-          .withIndex("by_generation", (q) =>
-            q.eq("generation", args.generation as number),
-          )
-          .collect();
+      // Fast path: use search index when a search term is present
+      if (search) {
+        const searchTerm = search.toLowerCase();
+        if (hasValidGeneration) {
+          results = await ctx.db
+            .query("pokemon")
+            .withSearchIndex("search_name", (q) =>
+              q.search("name", searchTerm).eq("generation", args.generation as number),
+            )
+            .collect();
+        } else {
+          results = await ctx.db
+            .query("pokemon")
+            .withSearchIndex("search_name", (q) => q.search("name", searchTerm))
+            .collect();
+        }
+      } else if (hasValidGeneration) {
+        // Use generation index when provided
+        if (types.length === 0 && forms.length === 0) {
+          // Pagination directly from index when no extra filters
+          results = await ctx.db
+            .query("pokemon")
+            .withIndex("by_generation", (q) =>
+              q.eq("generation", args.generation as number),
+            )
+            .order("asc")
+            .take(offset + limit);
+        } else {
+          results = await ctx.db
+            .query("pokemon")
+            .withIndex("by_generation", (q) =>
+              q.eq("generation", args.generation as number),
+            )
+            .collect();
 
-        // Fallback: if none found via generation index, use Pokédex ID ranges
-        if (results.length === 0) {
-          const range = GEN_RANGES[args.generation as number];
-          if (range) {
-            results = await ctx.db
-              .query("pokemon")
-              .withIndex("by_pokemon_id", (q) =>
-                q.gte("pokemonId", range.start).lte("pokemonId", range.end),
-              )
-              .collect();
+          // Fallback range if needed
+          if (results.length === 0) {
+            const range = GEN_RANGES[args.generation as number];
+            if (range) {
+              results = await ctx.db
+                .query("pokemon")
+                .withIndex("by_pokemon_id", (q) =>
+                  q.gte("pokemonId", range.start).lte("pokemonId", range.end),
+                )
+                .collect();
+            }
           }
         }
       } else {
-        results = await ctx.db.query("pokemon").collect();
+        // Default: no search, no generation
+        if (types.length === 0 && forms.length === 0) {
+          // Fast pagination via primary index without scanning entire table
+          results = await ctx.db
+            .query("pokemon")
+            .withIndex("by_pokemon_id")
+            .order("asc")
+            .take(offset + limit);
+        } else {
+          // When filters are present, load all (dataset ~1025) then filter in-memory
+          results = await ctx.db.query("pokemon").collect();
+        }
       }
 
-      // De-duplicate by pokemonId (keep first by creation order)
+      // De-duplicate by pokemonId (keep first by creation/order)
       const unique = new Map<number, any>();
       for (const row of results) {
         if (!unique.has(row.pokemonId)) unique.set(row.pokemonId, row);
       }
       results = Array.from(unique.values());
-
-      // Apply search filter
-      if (search) {
-        const searchLower = search.toLowerCase();
-        results = results.filter(
-          (pokemon) =>
-            pokemon.name.toLowerCase().includes(searchLower) ||
-            pokemon.pokemonId.toString().includes(searchLower),
-        );
-      }
 
       // Apply type filter (case-insensitive)
       if (types.length > 0) {
@@ -100,7 +128,7 @@ export const list = query({
         );
       }
 
-      // Add: Apply forms filter (checks stored formTags) + fallback to forms cache
+      // Apply forms filter (checks stored formTags) + fallback to forms cache
       if (forms.length > 0) {
         const normalized = forms.map((f) => f.toLowerCase());
 
@@ -109,12 +137,10 @@ export const list = query({
         const anyFormsIds = new Set<number>(formRows.map((r) => r.pokemonId));
 
         const matchesCategory = (r: any, wanted: Set<string>) => {
-          const cats = Array.isArray(r.categories)
+          const cats: string[] = Array.isArray(r.categories)
             ? r.categories.map((c: any) => String(c).toLowerCase())
             : [];
-          // TS fix: type the callback param
           if (cats.some((c: string) => wanted.has(c))) return true;
-          // fallback on boolean flags if present
           return (
             (wanted.has("regional") && r.isRegional === true) ||
             (wanted.has("mega") && r.isMega === true) ||
@@ -126,20 +152,17 @@ export const list = query({
         };
 
         if (normalized.includes("any") || normalized.includes("all-forms")) {
-          // Include Pokémon that either already have tags or appear in the forms cache
           results = results.filter((pokemon) => {
             const tags: string[] = Array.isArray(pokemon.formTags) ? pokemon.formTags : [];
             return tags.length > 0 || anyFormsIds.has(pokemon.pokemonId);
           });
         } else {
-          // Specific categories
           const wanted = new Set<string>(normalized);
           const specificIds = new Set<number>();
           for (const r of formRows) {
             if (matchesCategory(r, wanted)) specificIds.add(r.pokemonId);
           }
 
-          // Add: ensure Regional Forms include the canonical species set even if forms cache isn't complete yet
           if (wanted.has("regional")) {
             for (const id of REGIONAL_SPECIES) specificIds.add(id);
           }
@@ -155,12 +178,22 @@ export const list = query({
       // Sort by Pokemon ID
       results.sort((a, b) => a.pokemonId - b.pokemonId);
 
-      // Apply pagination with a safe offset to avoid empty results after filter changes
+      // Pagination with safe offset
       const safeOffset = offset >= results.length ? 0 : offset;
       const paginatedResults = results.slice(safeOffset, safeOffset + limit);
 
+      // Return only lightweight fields to reduce payload size
+      const light = paginatedResults.map((p) => ({
+        pokemonId: p.pokemonId,
+        name: p.name,
+        sprites: p.sprites,
+        types: p.types,
+        generation: p.generation,
+        formTags: p.formTags,
+      }));
+
       return {
-        pokemon: paginatedResults,
+        pokemon: light,
         total: results.length,
         hasMore: safeOffset + limit < results.length,
       };

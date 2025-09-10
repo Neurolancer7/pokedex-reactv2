@@ -60,7 +60,9 @@ const schema = defineSchema(
       formTags: v.optional(v.array(v.string())),
     }).index("by_pokemon_id", ["pokemonId"])
       .index("by_name", ["name"])
-      .index("by_generation", ["generation"]),
+      .index("by_generation", ["generation"])
+      // Add: search index for faster name search (with generation as a filter)
+      .searchIndex("search_name", { searchField: "name", filterFields: ["generation"] }),
 
     pokemonSpecies: defineTable({
       pokemonId: v.number(),

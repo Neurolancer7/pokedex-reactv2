@@ -4,6 +4,63 @@ import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 
+// Add: Utility fetch wrappers with timeout and retries for safer external calls
+async function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = 15000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+async function fetchJson(
+  url: string,
+  label: string,
+  init?: RequestInit,
+  timeoutMs = 15000,
+  retries = 2
+): Promise<any> {
+  let lastErr: unknown = undefined;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetchWithTimeout(url, init, timeoutMs);
+      if (!res.ok) {
+        const status = res.status;
+        const text = res.statusText || "Unknown error";
+        // Retry only on transient errors
+        if ((status === 429 || status >= 500) && attempt < retries) {
+          await delay(400 * (attempt + 1));
+          continue;
+        }
+        throw new Error(`[${label}] HTTP ${status} ${text}`);
+      }
+      try {
+        return await res.json();
+      } catch {
+        throw new Error(`[${label}] Invalid JSON response`);
+      }
+    } catch (e) {
+      lastErr = e;
+      // Retry on network/abort errors
+      if (attempt < retries) {
+        await delay(400 * (attempt + 1));
+        continue;
+      }
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`[${label}] ${msg}`);
+    }
+  }
+  // Fallback (should not reach)
+  throw lastErr instanceof Error ? lastErr : new Error(`[${label}] Unknown error`);
+}
+
 // Add: Internal action to process a chunk of Pokémon IDs in the background
 export const processChunk = internalAction({
   args: {
@@ -28,32 +85,19 @@ export const processChunk = internalAction({
             const speciesUrl = `https://pokeapi.co/api/v2/pokemon-species/${pokemonId}`;
             const formUrl = `https://pokeapi.co/api/v2/pokemon-form/${pokemonId}`;
 
-            const [pokemonResponse, speciesResponse, formResponse] = await Promise.all([
-              fetch(pokemonUrl),
-              fetch(speciesUrl),
-              fetch(formUrl),
-            ]);
-
-            if (!pokemonResponse.ok) {
-              throw new Error(`PokéAPI pokemon request failed (id ${pokemonId}): ${pokemonResponse.status} ${pokemonResponse.statusText}`);
-            }
-            if (!speciesResponse.ok) {
-              throw new Error(`PokéAPI species request failed (id ${pokemonId}): ${speciesResponse.status} ${speciesResponse.statusText}`);
-            }
-
-            let formData: any | undefined = undefined;
-            if (formResponse.ok) {
-              try {
-                formData = await formResponse.json();
-              } catch {
-                formData = undefined;
-              }
-            }
-
+            // Use robust fetch with timeouts & retries
             const [pokemonData, speciesData] = await Promise.all([
-              pokemonResponse.json(),
-              speciesResponse.json(),
+              fetchJson(pokemonUrl, "PokéAPI pokemon"),
+              fetchJson(speciesUrl, "PokéAPI species"),
             ]);
+
+            // Form is best-effort; ignore failures
+            let formData: any | undefined = undefined;
+            try {
+              formData = await fetchJson(formUrl, "PokéAPI form");
+            } catch {
+              formData = undefined;
+            }
 
             await ctx.runMutation(internal.pokemonInternal.cachePokemon, {
               pokemonData,
@@ -157,11 +201,7 @@ export const crawlFormsProcessPage = internalAction({
     const { offset, limit } = args;
     const listUrl = `https://pokeapi.co/api/v2/pokemon-form?limit=${limit}&offset=${offset}`;
     try {
-      const res = await fetch(listUrl);
-      if (!res.ok) {
-        throw new Error(`pokemon-form list failed ${res.status} ${res.statusText}`);
-      }
-      const data = await res.json();
+      const data = await fetchJson(listUrl, "PokéAPI pokemon-form list");
       const items: Array<{ name: string; url: string }> = Array.isArray(data?.results) ? data.results : [];
 
       const CONCURRENCY = 4;
@@ -170,11 +210,7 @@ export const crawlFormsProcessPage = internalAction({
         await Promise.all(
           batch.map(async (it) => {
             try {
-              const formDetailRes = await fetch(it.url);
-              if (!formDetailRes.ok) {
-                throw new Error(`pokemon-form details failed ${formDetailRes.status} ${formDetailRes.statusText}`);
-              }
-              const form = await formDetailRes.json();
+              const form = await fetchJson(it.url, "PokéAPI pokemon-form details");
 
               const formId = Number(form?.id);
               const formName = String(form?.form_name ?? "");
@@ -229,9 +265,7 @@ export const crawlForms = internalAction({
   args: {},
   handler: async (ctx) => {
     try {
-      const headRes = await fetch("https://pokeapi.co/api/v2/pokemon-form?limit=1&offset=0");
-      if (!headRes.ok) throw new Error(`pokemon-form head failed ${headRes.status} ${headRes.statusText}`);
-      const head = await headRes.json();
+      const head = await fetchJson("https://pokeapi.co/api/v2/pokemon-form?limit=1&offset=0", "PokéAPI pokemon-form head");
       const count = Number(head?.count ?? 0);
       if (!Number.isFinite(count) || count <= 0) return;
 
@@ -289,15 +323,7 @@ export const fetchAndCachePokemon = action({
 
 async function cacheTypes(ctx: any) {
   try {
-    const typesResponse = await fetch("https://pokeapi.co/api/v2/type");
-    // Add response.ok check for types endpoint
-    if (!typesResponse.ok) {
-      throw new Error(
-        `PokéAPI types request failed: ${typesResponse.status} ${typesResponse.statusText}`
-      );
-    }
-    const typesData = await typesResponse.json();
-
+    const typesData = await fetchJson("https://pokeapi.co/api/v2/type", "PokéAPI types");
     const typeColors: Record<string, string> = {
       normal: "#A8A878",
       fire: "#F08030",

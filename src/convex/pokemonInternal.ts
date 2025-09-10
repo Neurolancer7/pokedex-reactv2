@@ -1,16 +1,14 @@
 import { v } from "convex/values";
 import { internalQuery, internalMutation } from "./_generated/server";
 
-// Internal query to check if Pokemon exists
+// Internal query to check if Pokemon exists (scan instead of indexed query)
 export const getByIdInternal = internalQuery({
   args: { pokemonId: v.number() },
   handler: async (ctx, args) => {
     try {
-      const results = await ctx.db
-        .query("pokemon")
-        .withIndex("by_pokemon_id", (q) => q.eq("pokemonId", args.pokemonId))
-        .collect();
-      return results[0] ?? null;
+      const all = await ctx.db.query("pokemon").collect();
+      const doc = all.find((p: any) => p.pokemonId === args.pokemonId) ?? null;
+      return doc;
     } catch (err) {
       const message =
         err instanceof Error
@@ -22,7 +20,7 @@ export const getByIdInternal = internalQuery({
   },
 });
 
-// Internal mutation to cache Pokemon data
+// Internal mutation to cache Pokemon data (remove index usage; scan & find)
 export const cachePokemon = internalMutation({
   args: {
     pokemonData: v.any(),
@@ -35,11 +33,8 @@ export const cachePokemon = internalMutation({
       const { pokemonData, speciesData, formData } = args;
 
       // Upsert Pokemon (avoid creating duplicates)
-      const existingPokemonArr = await ctx.db
-        .query("pokemon")
-        .withIndex("by_pokemon_id", (q) => q.eq("pokemonId", pokemonData.id))
-        .collect();
-      const existingPokemon = existingPokemonArr[0] ?? null;
+      const allPokemon = await ctx.db.query("pokemon").collect();
+      const existingPokemon = allPokemon.find((p: any) => p.pokemonId === pokemonData.id) ?? null;
 
       const pokemonDoc = {
         pokemonId: pokemonData.id,
@@ -98,11 +93,9 @@ export const cachePokemon = internalMutation({
           ?.find((entry: any) => entry?.language?.name === "en")?.flavor_text
           ?.replace(/\f/g, " ") || "";
 
-      const existingSpeciesArr = await ctx.db
-        .query("pokemonSpecies")
-        .withIndex("by_pokemon_id", (q) => q.eq("pokemonId", pokemonData.id))
-        .collect();
-      const existingSpecies = existingSpeciesArr[0] ?? null;
+      const allSpecies = await ctx.db.query("pokemonSpecies").collect();
+      const existingSpecies =
+        allSpecies.find((s: any) => s.pokemonId === pokemonData.id) ?? null;
 
       const speciesDoc = {
         pokemonId: pokemonData.id,
@@ -111,13 +104,13 @@ export const cachePokemon = internalMutation({
         genus: speciesData?.genera?.find((g: any) => g?.language?.name === "en")
           ?.genus,
         captureRate:
-            typeof speciesData?.capture_rate === "number"
-              ? speciesData.capture_rate
-              : undefined,
+          typeof speciesData?.capture_rate === "number"
+            ? speciesData.capture_rate
+            : undefined,
         baseHappiness:
-            typeof speciesData?.base_happiness === "number"
-              ? speciesData.base_happiness
-              : undefined,
+          typeof speciesData?.base_happiness === "number"
+            ? speciesData.base_happiness
+            : undefined,
         growthRate: speciesData?.growth_rate?.name,
         habitat: speciesData?.habitat?.name,
         evolutionChainId: speciesData?.evolution_chain?.url
@@ -146,7 +139,7 @@ export const cachePokemon = internalMutation({
   },
 });
 
-// Internal mutation to cache Pokemon types
+// Internal mutation to cache Pokemon types (remove index usage; scan & find)
 export const cacheType = internalMutation({
   args: {
     name: v.string(),
@@ -155,21 +148,17 @@ export const cacheType = internalMutation({
   handler: async (ctx, args) => {
     try {
       const name = args.name.toLowerCase().trim();
-      const existing = await ctx.db
-        .query("pokemonTypes")
-        .withIndex("by_name", (q) => q.eq("name", name))
-        .collect();
+      const all = await ctx.db.query("pokemonTypes").collect();
+      const existing = all.find((t: any) => t.name === name);
 
-      if (existing.length === 0) {
+      if (!existing) {
         await ctx.db.insert("pokemonTypes", {
           name,
           color: args.color,
         });
       } else {
-        // Keep color fresh for the first matching doc; avoid unique() crashes if multiple exist
-        const first = existing[0];
-        if (first.color !== args.color) {
-          await ctx.db.patch(first._id, { color: args.color });
+        if (existing.color !== args.color) {
+          await ctx.db.patch(existing._id, { color: args.color });
         }
       }
 
@@ -185,88 +174,7 @@ export const cacheType = internalMutation({
   },
 });
 
-// Add: explicit regional form species IDs to improve tag accuracy
-const REGIONAL_FORM_SPECIES: Set<number> = new Set([
-  19, 20, 26, 27, 28, 37, 38, 50, 51, 52, 53, 58, 59, 74, 75, 76, 77, 78, 79,
-  80, 83, 88, 89, 100, 101, 103, 105, 110, 122, 128, 144, 145, 146, 157, 194,
-  199, 211, 215, 222, 263, 264, 503, 549, 554, 555, 562, 570, 571, 618, 628,
-  705, 706, 713, 724,
-]);
-
-// Add: helper to derive form tags from PokeAPI data
-function getFormTags(pokemonData: any, speciesData: any, formData?: any): string[] {
-  try {
-    const tags: Set<string> = new Set();
-    const name: string = String(pokemonData?.name ?? "").toLowerCase();
-
-    const idNum = Number(pokemonData?.id);
-    if (Number.isFinite(idNum) && REGIONAL_FORM_SPECIES.has(idNum)) {
-      tags.add("regional");
-    }
-
-    // Use formData for precise flags on the current form
-    if (formData && typeof formData === "object") {
-      if (formData.is_mega === true) {
-        tags.add("mega");
-      }
-      const formName = String(formData.form_name ?? "").toLowerCase();
-      if (formName.includes("gmax") || formName.includes("gigantamax")) {
-        tags.add("gigantamax");
-      }
-      const regionalHints = ["alola", "alolan", "galar", "galarian", "hisui", "hisuian", "paldea", "paldean"];
-      if (regionalHints.some((r) => formName.includes(r))) {
-        tags.add("regional");
-      }
-    }
-
-    // Name-based fallbacks (rare, but included)
-    if (name.includes("mega")) {
-      tags.add("mega");
-    }
-    if (name.includes("gmax") || name.includes("gigantamax")) {
-      tags.add("gigantamax");
-    }
-    const regionalHints = ["alola", "alolan", "galar", "galarian", "hisui", "hisuian", "paldea", "paldean"];
-    if (regionalHints.some((r) => name.includes(r))) {
-      tags.add("regional");
-    }
-
-    // Species-level detection from varieties:
-    // If ANY variety name indicates mega/gmax/regional, tag the base species accordingly.
-    const varieties: Array<any> = Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
-    for (const v of varieties) {
-      const vName = String(v?.pokemon?.name ?? "").toLowerCase();
-      if (vName.includes("mega")) {
-        tags.add("mega");
-      }
-      if (vName.includes("gmax") || vName.includes("gigantamax")) {
-        tags.add("gigantamax");
-      }
-      if (regionalHints.some((r) => vName.includes(r))) {
-        tags.add("regional");
-      }
-    }
-
-    if (speciesData?.has_gender_differences) {
-      tags.add("gender");
-    }
-
-    if (speciesData?.forms_switchable && !tags.has("mega") && !tags.has("gigantamax")) {
-      tags.add("cosmetic");
-    }
-
-    const altCount = varieties.filter((v) => !v?.is_default).length;
-    if (altCount > 0 && !tags.has("mega") && !tags.has("gigantamax") && !tags.has("regional")) {
-      tags.add("alternate");
-    }
-
-    return Array.from(tags);
-  } catch {
-    return [];
-  }
-}
-
-// Add: Upsert a canonical form row
+// Add: Upsert a canonical form row (remove index usage; scan & find)
 export const upsertForm = internalMutation({
   args: {
     formId: v.number(),
@@ -286,13 +194,10 @@ export const upsertForm = internalMutation({
   },
   handler: async (ctx, args) => {
     try {
-      const existing = await ctx.db
-        .query("pokemonForms")
-        .withIndex("by_form_id", (q) => q.eq("formId", args.formId))
-        .collect();
+      const all = await ctx.db.query("pokemonForms").collect();
+      const doc = all.find((f: any) => f.formId === args.formId);
 
-      if (existing.length > 0) {
-        const doc = existing[0];
+      if (doc) {
         await ctx.db.patch(doc._id, {
           formName: args.formName,
           pokemonName: args.pokemonName,
@@ -328,7 +233,7 @@ export const upsertForm = internalMutation({
   },
 });
 
-// Add: Merge discovered form categories into the base Pokémon's formTags
+// Add: Merge discovered form categories into the base Pokémon's formTags (scan & find)
 export const mergeFormTagsIntoPokemon = internalMutation({
   args: {
     pokemonId: v.number(),
@@ -336,15 +241,12 @@ export const mergeFormTagsIntoPokemon = internalMutation({
   },
   handler: async (ctx, args) => {
     try {
-      const base = await ctx.db
-        .query("pokemon")
-        .withIndex("by_pokemon_id", (q) => q.eq("pokemonId", args.pokemonId))
-        .collect();
-      if (base.length === 0) {
+      const all = await ctx.db.query("pokemon").collect();
+      const doc = all.find((p: any) => p.pokemonId === args.pokemonId);
+      if (!doc) {
         // Base entry might not be cached yet; skip
         return null;
       }
-      const doc = base[0];
       const existing: string[] = Array.isArray(doc.formTags) ? doc.formTags : [];
       const merged = Array.from(new Set([...existing, ...args.categories.map((c) => c.toLowerCase())]));
       if (merged.length !== existing.length) {
