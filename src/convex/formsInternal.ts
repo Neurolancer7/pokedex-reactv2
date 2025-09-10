@@ -31,14 +31,14 @@ export const upsertForm = internalMutation({
       .withIndex("by_form_id", (q) => q.eq("formId", args.formId))
       .collect();
 
-    // Add: derive categories array from boolean flags to satisfy schema requirement
-    const categoriesArr: string[] = [];
-    if (args.isMega) categoriesArr.push("mega");
-    if (args.isGigantamax) categoriesArr.push("gigantamax");
-    if (args.isRegional) categoriesArr.push("regional");
-    if (args.isGender) categoriesArr.push("gender");
-    if (args.isCosmetic) categoriesArr.push("cosmetic");
-    if (args.isAlternate) categoriesArr.push("alternate");
+    // Build categories array from boolean flags to satisfy schema
+    const categories: string[] = [];
+    if (args.isMega) categories.push("mega");
+    if (args.isGigantamax) categories.push("gigantamax");
+    if (args.isRegional) categories.push("regional");
+    if (args.isGender) categories.push("gender");
+    if (args.isCosmetic) categories.push("cosmetic");
+    if (args.isAlternate) categories.push("alternate");
 
     const doc = {
       formId: args.formId,
@@ -58,8 +58,8 @@ export const upsertForm = internalMutation({
       isGender: args.isGender,
       isCosmetic: args.isCosmetic,
       isAlternate: args.isAlternate,
-      // Add: required categories field
-      categories: categoriesArr,
+      // Add categories required by schema
+      categories,
     };
 
     if (existing.length > 0) {
@@ -103,9 +103,7 @@ export const list = query({
     const offset = Math.max(0, args.offset ?? 0);
     const search = args.search?.trim().toLowerCase();
 
-    // Replace: avoid mixed Query vs QueryInitializer assignments; fetch rows directly
     let rows: any[] = [];
-
     if (typeof args.pokemonId === "number") {
       rows = await ctx.db
         .query("pokemonForms")
