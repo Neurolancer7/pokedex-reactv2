@@ -70,7 +70,8 @@ export const processChunk = internalAction({
     const ids = args.ids.filter((id) => Number.isFinite(id) && id > 0 && id <= 1025);
     if (ids.length === 0) return;
 
-    const CONCURRENCY = 4;
+    // Reduced from 4 -> 3 to avoid commit overload under heavy load
+    const CONCURRENCY = 3;
 
     for (let i = 0; i < ids.length; i += CONCURRENCY) {
       const batch = ids.slice(i, i + CONCURRENCY);
@@ -133,13 +134,25 @@ export const processAll = internalAction({
     const ids = args.ids.filter((id) => Number.isFinite(id) && id > 0 && id <= 1025);
     if (ids.length === 0) return;
 
-    const CHUNK_SIZE = 20;
-    const schedules: Array<Promise<any>> = [];
+    // Larger chunk size -> fewer chunks overall
+    const CHUNK_SIZE = 50;
+
     for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
       const chunk = ids.slice(i, i + CHUNK_SIZE);
-      schedules.push(ctx.scheduler.runAfter(0, internal.pokemonData.processChunk, { ids: chunk }));
+      try {
+        // Run the chunk immediately (no scheduler), avoiding large bursts of scheduled commits
+        await ctx.runAction(internal.pokemonData.processChunk, { ids: chunk });
+      } catch (e) {
+        console.error("processAll chunk error:", e);
+      }
+
+      // Gentle pacing to avoid overwhelming commit queue in bursts
+      try {
+        await delay(50);
+      } catch {
+        // ignore pacing errors
+      }
     }
-    await Promise.allSettled(schedules);
   },
 });
 
