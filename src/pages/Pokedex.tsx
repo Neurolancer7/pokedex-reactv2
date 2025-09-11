@@ -186,6 +186,10 @@ export default function Pokedex() {
     "dudunsparce","gimmighoul","poltchageist","sinistcha","ogerpon","terapagos"
   ];
 
+  // Add state for Mega and G-Max visible counts
+  const [megaVisibleCount, setMegaVisibleCount] = useState(30);
+  const [gmaxVisibleCount, setGmaxVisibleCount] = useState(30);
+
   // Build Pokemon from a pokemon/{name} entry (types, sprites, id, stats)
   const buildPokemonFromEntry = (p: any): Pokemon => ({
     pokemonId: Number(p?.id ?? 0),
@@ -379,6 +383,7 @@ export default function Pokedex() {
           }
           const finalList = Object.values(merged).sort((a, b) => a.pokemonId - b.pokemonId);
           setMegaList(finalList);
+          setMegaVisibleCount(30);
         } finally {
           setMegaLoading(false);
         }
@@ -469,6 +474,7 @@ export default function Pokedex() {
           }));
           // Ensure stable order by national dex id
           setGmaxList(mapped.sort((a, b) => a.pokemonId - b.pokemonId));
+          setGmaxVisibleCount(30);
         } catch (e) {
           const msg = e instanceof Error ? e.message : "Failed to load Gigantamax data";
           toast.error(msg);
@@ -790,6 +796,26 @@ export default function Pokedex() {
       const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
       if (!nearBottom) return;
 
+      // Mega: client-side infinite after first manual load
+      if (selectedFormCategory === "mega") {
+        if (!infiniteEnabled) return;
+        const total = megaList.length;
+        if (megaVisibleCount < total) {
+          setMegaVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
+        }
+        return;
+      }
+
+      // Gigantamax: client-side infinite after first manual load
+      if (selectedFormCategory === "gigantamax") {
+        if (!infiniteEnabled) return;
+        const total = gmaxList.length;
+        if (gmaxVisibleCount < total) {
+          setGmaxVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
+        }
+        return;
+      }
+
       // Regional: client-side infinite after first manual load
       if (selectedFormCategory === "regional") {
         if (!infiniteEnabled) return;
@@ -849,6 +875,10 @@ export default function Pokedex() {
     altHasMore,
     altLoading,
     altList.length,
+    megaList.length,
+    megaVisibleCount,
+    gmaxList.length,
+    gmaxVisibleCount,
   ]);
 
   useEffect(() => {
@@ -887,9 +917,9 @@ export default function Pokedex() {
   const displayPokemon = selectedFormCategory === "alternate"
     ? [...altList].sort((a, b) => a.pokemonId - b.pokemonId)
     : (selectedFormCategory === "mega"
-        ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId)
+        ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, megaVisibleCount)
         : (selectedFormCategory === "gigantamax"
-            ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId)
+            ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, gmaxVisibleCount)
             : (selectedFormCategory === "regional"
                 ? regionalFlatList.slice(0, regionalVisibleCount)
                 : (showFavorites ? (favorites || []) : items))));
@@ -1125,7 +1155,27 @@ export default function Pokedex() {
                     <span className="sr-only">Loading Mega Evolutions…</span>
                   </div>
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  {megaVisibleCount >= megaList.length && megaList.length > 0 && (
+                    <div className="text-muted-foreground text-sm">No more Pokémon</div>
+                  )}
+                  {megaVisibleCount < megaList.length && (
+                    <Button
+                      variant="default"
+                      className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        const total = megaList.length;
+                        setMegaVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
+                        setInfiniteEnabled(true);
+                      }}
+                      aria-label="Load more Pokémon"
+                    >
+                      Load More
+                    </Button>
+                  )}
+                </>
+              )}
             </div>
           ) : selectedFormCategory === "gigantamax" ? (
             <div className="mt-8 flex flex-col items-center gap-3">
@@ -1146,7 +1196,27 @@ export default function Pokedex() {
                     <span className="sr-only">Loading Gigantamax forms…</span>
                   </div>
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  {gmaxVisibleCount >= gmaxList.length && gmaxList.length > 0 && (
+                    <div className="text-muted-foreground text-sm">No more Pokémon</div>
+                  )}
+                  {gmaxVisibleCount < gmaxList.length && (
+                    <Button
+                      variant="default"
+                      className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        const total = gmaxList.length;
+                        setGmaxVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
+                        setInfiniteEnabled(true);
+                      }}
+                      aria-label="Load more Pokémon"
+                    >
+                      Load More
+                    </Button>
+                  )}
+                </>
+              )}
             </div>
           ) : selectedFormCategory === "regional" ? (
             <div className="mt-8 flex flex-col items-center gap-3">
