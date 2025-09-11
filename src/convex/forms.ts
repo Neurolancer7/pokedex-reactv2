@@ -148,7 +148,7 @@ export const processFormPage = internalAction({
     const listData = await listRes.json();
 
     const entries: Array<{ name: string; url: string }> = Array.isArray(listData.results) ? listData.results : [];
-    const CONCURRENCY = 8;
+    const CONCURRENCY = 1;
 
     for (let i = 0; i < entries.length; i += CONCURRENCY) {
       const batch = entries.slice(i, i + CONCURRENCY);

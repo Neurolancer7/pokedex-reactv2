@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RotateCw } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
@@ -209,9 +209,6 @@ export function GenderDiffGrid({ species }: Props) {
               <DialogTitle className="text-xl font-bold capitalize">
                 {selected?.name?.replace("-", " ")}
               </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                Quick view to compare male/female appearances
-              </DialogDescription>
             </DialogHeader>
 
             {/* Gender toggle */}

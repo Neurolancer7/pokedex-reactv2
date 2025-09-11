@@ -126,8 +126,8 @@ export const processChunk = internalAction({
     const ids = args.ids.filter((id) => Number.isFinite(id) && id > 0 && id <= 1025);
     if (ids.length === 0) return;
 
-    // Reduced from 4 -> 3 to avoid commit overload under heavy load
-    const CONCURRENCY = 3;
+    // Reduced from 3 -> 1 to reduce commit saturation
+    const CONCURRENCY = 1;
 
     for (let i = 0; i < ids.length; i += CONCURRENCY) {
       const batch = ids.slice(i, i + CONCURRENCY);
@@ -190,8 +190,8 @@ export const processAll = internalAction({
     const ids = args.ids.filter((id) => Number.isFinite(id) && id > 0 && id <= 1025);
     if (ids.length === 0) return;
 
-    // Larger chunk size -> fewer chunks overall
-    const CHUNK_SIZE = 50;
+    // Reduced chunk size to lessen commit pressure (50 -> 10)
+    const CHUNK_SIZE = 10;
 
     for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
       const chunk = ids.slice(i, i + CHUNK_SIZE);
@@ -202,9 +202,9 @@ export const processAll = internalAction({
         console.error("processAll chunk error:", e);
       }
 
-      // Gentle pacing to avoid overwhelming commit queue in bursts
+      // Slightly more pacing to avoid overwhelming commit queue
       try {
-        await delay(50);
+        await delay(80); // was 50
       } catch {
         // ignore pacing errors
       }
@@ -302,8 +302,8 @@ export const processGigantamaxForms = internalAction({
       "duraludon",
     ];
 
-    // Reduced concurrency for stability
-    const CONCURRENCY = 3;
+    // Reduced concurrency for stability (from 3 -> 1)
+    const CONCURRENCY = 1;
 
     const names = baseNames.map((n) => `${n}-gmax`);
 
@@ -359,7 +359,7 @@ export const processGigantamaxForms = internalAction({
       );
 
       try {
-        await delay(30);
+        await delay(60); // was 30
       } catch {
         // ignore pacing error
       }
@@ -399,7 +399,7 @@ export const crawlFormsProcessPage = internalAction({
       const items: Array<{ name: string; url: string }> = Array.isArray(data?.results) ? data.results : [];
 
       // Reduced concurrency to ease commit pressure
-      const CONCURRENCY = 3;
+      const CONCURRENCY = 1;
       for (let i = 0; i < items.length; i += CONCURRENCY) {
         const batch = items.slice(i, i + CONCURRENCY);
         await Promise.all(
@@ -449,7 +449,7 @@ export const crawlFormsProcessPage = internalAction({
         );
         // small pacing between batches
         try {
-          await delay(30);
+          await delay(60); // was 30
         } catch {
           // ignore
         }
@@ -466,21 +466,35 @@ export const crawlForms = internalAction({
   args: {},
   handler: async (ctx) => {
     try {
+      // NEW: skip if forms already exist to avoid redundant large crawls
+      try {
+        const formsExist = await ctx.runQuery(internal.pokemonInternal.hasForms, {});
+        if (formsExist) return;
+      } catch {
+        // Ignore check failures, continue best-effort
+      }
+
       const head = await fetchJson("https://pokeapi.co/api/v2/pokemon-form?limit=1&offset=0", "PokéAPI pokemon-form head");
       const count = Number(head?.count ?? 0);
       if (!Number.isFinite(count) || count <= 0) return;
 
       const PAGE = 200;
-      const schedules: Array<Promise<any>> = [];
+
+      // Change: run sequentially (not scheduled) to avoid high concurrent load
       for (let offset = 0; offset < count; offset += PAGE) {
-        schedules.push(
-          ctx.scheduler.runAfter(0, internal.pokemonData.crawlFormsProcessPage, {
-            offset,
-            limit: Math.min(PAGE, count - offset),
-          }),
-        );
+        const limit = Math.min(PAGE, count - offset);
+        try {
+          await ctx.runAction(internal.pokemonData.crawlFormsProcessPage, { offset, limit });
+        } catch (e) {
+          console.error("crawlForms sequential page error:", e);
+        }
+        // Gentle pacing between pages
+        try {
+          await delay(80);
+        } catch {
+          // ignore
+        }
       }
-      await Promise.allSettled(schedules);
     } catch (e) {
       console.error("crawlForms error:", e);
     }
@@ -549,20 +563,20 @@ export const fetchAndCachePokemon = action({
       if (!hasTypes) {
         try {
           await scheduleWithRetry(ctx, "processTypes", internal.pokemonData.processTypes, {}, 5, 200);
-          await delay(50);
+          await delay(100); // was 50
         } catch (e) {
           console.error("schedule processTypes error:", e);
         }
       }
 
       await scheduleWithRetry(ctx, "processAll", internal.pokemonData.processAll, { ids }, 5, 200);
-      await delay(50);
+      await delay(100); // was 50
 
       if (!hasForms) {
         // Ensure specific Gmax forms quickly available for the filter
         try {
           await scheduleWithRetry(ctx, "processGigantamaxForms", internal.pokemonData.processGigantamaxForms, {}, 5, 200);
-          await delay(50);
+          await delay(100); // was 50
         } catch (e) {
           console.error("schedule processGigantamaxForms error:", e);
         }
