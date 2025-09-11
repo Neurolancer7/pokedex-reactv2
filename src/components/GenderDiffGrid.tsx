@@ -27,6 +27,43 @@ export function GenderDiffGrid({ species }: Props) {
   const [descError, setDescError] = useState<string | null>(null);
   const [descText, setDescText] = useState<string | null>(null);
   const [descSource, setDescSource] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(30);
+  const [infiniteEnabled, setInfiniteEnabled] = useState(false);
+
+  useEffect(() => {
+    setVisibleCount(30);
+    setInfiniteEnabled(false);
+  }, [species, isLoading]);
+
+  useEffect(() => {
+    const THRESHOLD_PX = 400;
+    const onScroll = () => {
+      if (!Array.isArray(data) || data.length === 0) return;
+      if (!infiniteEnabled) return;
+
+      const scrollY = window.scrollY || window.pageYOffset;
+      const viewportH = window.innerHeight || document.documentElement.clientHeight;
+      const docH = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.offsetHeight,
+        document.body.clientHeight,
+        document.documentElement.clientHeight
+      );
+      const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
+      if (!nearBottom) return;
+
+      if (visibleCount < data.length) {
+        setVisibleCount((c) => Math.min(c + 30, data.length));
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [data, infiniteEnabled, visibleCount]);
 
   const bulbapediaUrl = (name: string) => {
     const anchor = name.replace(/-/g, "_"); // closer to Bulbapedia's section ids
@@ -144,70 +181,92 @@ export function GenderDiffGrid({ species }: Props) {
 
       {/* Grid */}
       {Array.isArray(data) && data.length > 0 && (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {data.map((p) => (
-            <Card
-              key={`${p.dexId}-${p.name}`}
-              className="overflow-hidden border-2 hover:border-primary/50 transition-colors cursor-pointer"
-              onClick={() => {
-                setSelected({ name: p.name, dexId: p.dexId });
-                setGender("male");
-                setImgKey((k) => k + 1);
-                setOpen(true);
-              }}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-sm font-mono text-muted-foreground">#{String(p.dexId).padStart(4, "0")}</span>
-                  <span
-                    title="Gender Differences"
-                    aria-label="Gender Differences"
-                    className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-pink-500/40"
-                  >
-                    <img
-                      src="https://harmless-tapir-303.convex.cloud/api/storage/d3256155-fdbb-486b-b117-e4850f259ab5"
-                      alt="Gender Differences"
-                      className="h-6 w-6 object-contain drop-shadow"
-                    />
-                  </span>
-                </div>
-
-                <div className="w-full flex items-center justify-center mb-3">
-                  <div className="w-28 h-28 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted rounded-full">
-                    <img
-                      src={spriteFromDexId(p.dexId)}
-                      alt={p.name}
-                      className="w-24 h-24 object-contain"
-                      loading="lazy"
-                    />
-                  </div>
-                </div>
-
-                <h3 className="font-bold text-lg text-center mb-3 tracking-tight capitalize">{p.name.replace("-", " ")}</h3>
-
-                <div className="flex flex-wrap gap-2">
-                  {p.forms.map((f, idx) => (
-                    <Button
-                      key={`${p.dexId}-${f.name}-${idx}`}
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="capitalize"
-                      onClick={(e) => e.stopPropagation()}
+        <>
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {data.slice(0, visibleCount).map((p) => (
+              <Card
+                key={`${p.dexId}-${p.name}`}
+                className="overflow-hidden border-2 hover:border-primary/50 transition-colors cursor-pointer"
+                onClick={() => {
+                  setSelected({ name: p.name, dexId: p.dexId });
+                  setGender("male");
+                  setImgKey((k) => k + 1);
+                  setOpen(true);
+                }}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="text-sm font-mono text-muted-foreground">#{String(p.dexId).padStart(4, "0")}</span>
+                    <span
+                      title="Gender Differences"
+                      aria-label="Gender Differences"
+                      className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-pink-500/40"
                     >
-                      <a href={f.url} target="_blank" rel="noreferrer">
-                        {f.name.replace("-", " ")}
-                      </a>
-                    </Button>
-                  ))}
-                  {p.forms.length === 0 && (
-                    <span className="text-xs text-muted-foreground">No forms listed</span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                      <img
+                        src="https://harmless-tapir-303.convex.cloud/api/storage/d3256155-fdbb-486b-b117-e4850f259ab5"
+                        alt="Gender Differences"
+                        className="h-6 w-6 object-contain drop-shadow"
+                      />
+                    </span>
+                  </div>
+
+                  <div className="w-full flex items-center justify-center mb-3">
+                    <div className="w-28 h-28 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted rounded-full">
+                      <img
+                        src={spriteFromDexId(p.dexId)}
+                        alt={p.name}
+                        className="w-24 h-24 object-contain"
+                        loading="lazy"
+                      />
+                    </div>
+                  </div>
+
+                  <h3 className="font-bold text-lg text-center mb-3 tracking-tight capitalize">{p.name.replace("-", " ")}</h3>
+
+                  <div className="flex flex-wrap gap-2">
+                    {p.forms.map((f, idx) => (
+                      <Button
+                        key={`${p.dexId}-${f.name}-${idx}`}
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="capitalize"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <a href={f.url} target="_blank" rel="noreferrer">
+                          {f.name.replace("-", " ")}
+                        </a>
+                      </Button>
+                    ))}
+                    {p.forms.length === 0 && (
+                      <span className="text-xs text-muted-foreground">No forms listed</span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Pagination controls */}
+          <div className="mt-8 flex flex-col items-center gap-3">
+            {visibleCount >= data.length && data.length > 0 && (
+              <div className="text-muted-foreground text-sm">No more Pokémon</div>
+            )}
+            {visibleCount < data.length && (
+              <Button
+                variant="default"
+                className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                onClick={() => {
+                  setVisibleCount((c) => Math.min(c + 30, data.length));
+                  setInfiniteEnabled(true);
+                }}
+                aria-label="Load more Pokémon"
+              >
+                Load More
+              </Button>
+            )}
+          </div>
+        </>
       )}
 
       {/* Simplified Gender Modal */}
