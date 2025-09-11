@@ -498,8 +498,8 @@ export default function Pokedex() {
     }
   };
 
-  // Add a small retry helper for transient connection drops
-  const runWithRetries = async <T,>(fn: () => Promise<T>, attempts = 3, delayMs = 600): Promise<T> => {
+  // Strengthen retry helper for transient Convex/Network hiccups
+  const runWithRetries = async <T,>(fn: () => Promise<T>, attempts = 5, delayMs = 800): Promise<T> => {
     let lastErr: unknown;
     for (let i = 0; i < attempts; i++) {
       try {
@@ -508,9 +508,13 @@ export default function Pokedex() {
         lastErr = err;
         const msg = err instanceof Error ? err.message : String(err);
         const retriable =
-          msg.includes("Connection lost while action was in flight") ||
-          msg.includes("NetworkError") ||
-          msg.includes("Failed to fetch");
+          /\bConnection lost while action was in flight\b/i.test(msg) ||
+          /\bNetworkError\b/i.test(msg) ||
+          /\bFailed to fetch\b/i.test(msg) ||
+          /\bAbortError\b/i.test(msg) ||
+          /\bfetch failed\b/i.test(msg) ||
+          /\bETIMEDOUT\b/i.test(msg) ||
+          msg.includes("[CONVEX A("); // any Convex action transport blip
         if (!retriable || i === attempts - 1) throw err;
         await new Promise((res) => setTimeout(res, delayMs * Math.pow(2, i)));
       }
