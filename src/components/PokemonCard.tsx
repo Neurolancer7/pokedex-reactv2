@@ -132,7 +132,7 @@ export function PokemonCard({
                   className="inline-flex items-center justify-center rounded-full bg-white/90 backdrop-blur border shadow p-1 ring-1 ring-fuchsia-500/40"
                 >
                   <img
-                    src="https://harmless-tapir-303.convex.cloud/api/storage/c454d9d0-824d-44a7-9f06-da70175922e2"
+                    src="https://harmless-tapir-303.convex.cloud/api/storage/5bccd8f0-8ff6-48ea-9149-b26759dfe4d5"
                     alt="Mega Evolution"
                     className="h-5 w-5 object-contain drop-shadow"
                   />

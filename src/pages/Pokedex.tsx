@@ -576,7 +576,11 @@ export default function Pokedex() {
   };
 
   // Strengthen retry helper for transient Convex/Network hiccups
-  const runWithRetries = async <T,>(fn: () => Promise<T>, attempts = 7, baseDelayMs = 500): Promise<T> => {
+  const runWithRetries = async <T,>(
+    fn: () => Promise<T>,
+    attempts = 10,
+    baseDelayMs = 600
+  ): Promise<T> => {
     let lastErr: unknown;
     const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
     for (let i = 0; i < attempts; i++) {
@@ -586,7 +590,7 @@ export default function Pokedex() {
         lastErr = err;
         const msg = err instanceof Error ? err.message : String(err);
 
-        // Treat known transient messages as retriable
+        // Expanded list of retriable transient errors
         const retriable =
           /\bConnection lost while action was in flight\b/i.test(msg) ||
           /\[CONVEX A\(/i.test(msg) ||
@@ -596,16 +600,27 @@ export default function Pokedex() {
           /\bfetch failed\b/i.test(msg) ||
           /\bETIMEDOUT\b/i.test(msg) ||
           /\bECONNRESET\b/i.test(msg) ||
-          /\bEAI_AGAIN\b/i.test(msg);
+          /\bEAI_AGAIN\b/i.test(msg) ||
+          /\bsocket hang up\b/i.test(msg) ||
+          /\bClient network socket disconnected\b/i.test(msg);
 
-        if (!retriable || i === attempts - 1) throw err;
+        // If not retriable, or this was the final attempt, handle exit
+        if (!retriable || i === attempts - 1) {
+          // One last hedge retry for known transient transport issues
+          if (retriable) {
+            const extraWait = baseDelayMs * Math.pow(2, i) + 1000;
+            await sleep(extraWait);
+            return await fn();
+          }
+          throw err;
+        }
 
         // Jittered exponential backoff
-        const jitter = Math.floor(Math.random() * 150);
+        const jitter = Math.floor(Math.random() * 200);
         const delayMs = baseDelayMs * Math.pow(2, i) + jitter;
 
-        // For Convex transport blips, give it a bit more breathing room
-        const extra = /\bConnection lost while action was in flight\b/i.test(msg) ? 250 : 0;
+        // Slight extra wait for Convex transport blips
+        const extra = /\bConnection lost while action was in flight\b/i.test(msg) ? 350 : 0;
 
         await sleep(delayMs + extra);
       }
