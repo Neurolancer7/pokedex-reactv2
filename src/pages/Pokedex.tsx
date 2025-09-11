@@ -479,6 +479,62 @@ export default function Pokedex() {
     });
   }, [selectedFormCategory, items.length, showFavorites, fetchPokemonData, isRefreshing]);
 
+  // Infinite scroll: auto-load when near bottom (fallback button remains)
+  useEffect(() => {
+    const THRESHOLD_PX = 400;
+
+    const handleScroll = () => {
+      // Skip in favorites mode
+      if (showFavorites) return;
+
+      const scrollY = window.scrollY || window.pageYOffset;
+      const viewportH = window.innerHeight || document.documentElement.clientHeight;
+      const docH = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.offsetHeight,
+        document.body.clientHeight,
+        document.documentElement.clientHeight
+      );
+
+      const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
+      if (!nearBottom) return;
+
+      // Alternate forms mode auto-fetch
+      if (selectedFormCategory === "alternate") {
+        if (!altHasMore || altLoading) return;
+        // fetch a small batch for smoother UX
+        fetchNextAltBatch(6).catch(() => {
+          toast.error("Failed to load more alternate forms.");
+        });
+        return;
+      }
+
+      // Default list auto-fetch
+      if (hasMore && !isLoadingMore) {
+        setIsLoadingMore(true);
+        setOffset((o) => o + BATCH_LIMIT);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, [
+    showFavorites,
+    selectedFormCategory,
+    altHasMore,
+    altLoading,
+    hasMore,
+    isLoadingMore,
+    BATCH_LIMIT,
+    fetchNextAltBatch,
+    setIsLoadingMore,
+    setOffset,
+  ]);
+
   useEffect(() => {
     setItems([]);
     setOffset(0);
