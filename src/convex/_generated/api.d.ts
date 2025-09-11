@@ -17,6 +17,7 @@ import type * as auth_emailOtp from "../auth/emailOtp.js";
 import type * as auth from "../auth.js";
 import type * as forms from "../forms.js";
 import type * as formsInternal from "../formsInternal.js";
+import type * as genderDiff from "../genderDiff.js";
 import type * as http from "../http.js";
 import type * as pokemon from "../pokemon.js";
 import type * as pokemonData from "../pokemonData.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   forms: typeof forms;
   formsInternal: typeof formsInternal;
+  genderDiff: typeof genderDiff;
   http: typeof http;
   pokemon: typeof pokemon;
   pokemonData: typeof pokemonData;

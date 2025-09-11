@@ -127,6 +127,17 @@ const schema = defineSchema(
       .index("by_isGender", ["isGender"])
       .index("by_isCosmetic", ["isCosmetic"])
       .index("by_isAlternate", ["isAlternate"]),
+
+    // Add: Cache for gender-difference descriptions sourced from Bulbapedia
+    genderDifferences: defineTable({
+      pokemonId: v.number(),
+      name: v.string(), // species base name (lowercase)
+      description: v.string(), // extracted section text
+      fetchedAt: v.number(), // epoch ms
+      sourceUrl: v.string(), // Bulbapedia URL used
+    })
+      .index("by_pokemon_id", ["pokemonId"])
+      .index("by_name", ["name"]),
   },
   {
     schemaValidation: false,

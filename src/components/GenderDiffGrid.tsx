@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RotateCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useAction } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 type Props = {
   species?: string[];
@@ -22,6 +24,10 @@ export function GenderDiffGrid({ species }: Props) {
   const [imgKey, setImgKey] = useState(0); // forces img reload on toggle
   const [bpLoading, setBpLoading] = useState(false);
   const [bpError, setBpError] = useState<string | null>(null);
+  const [descLoading, setDescLoading] = useState(false);
+  const [descError, setDescError] = useState<string | null>(null);
+  const [descText, setDescText] = useState<string | null>(null);
+  const [descSource, setDescSource] = useState<string | null>(null);
 
   const bulbapediaUrl = (name: string) => {
     const anchor = name.replace(/-/g, "_"); // closer to Bulbapedia's section ids
@@ -34,6 +40,8 @@ export function GenderDiffGrid({ species }: Props) {
     }
     return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${dexId}.png`;
   };
+
+  const fetchGenderDiff = useAction(api.pokemonData.fetchGenderDifference);
 
   const checkBulbapedia = async (name: string) => {
     const url = bulbapediaUrl(name);
@@ -68,6 +76,34 @@ export function GenderDiffGrid({ species }: Props) {
       setBpError(null);
     }
   }, [open, selected?.name]);
+
+  // Load Bulbapedia gender differences (server-side scraped & cached)
+  useEffect(() => {
+    const load = async () => {
+      if (!open || !selected) {
+        setDescLoading(false);
+        setDescError(null);
+        setDescText(null);
+        setDescSource(null);
+        return;
+      }
+      setDescLoading(true);
+      setDescError(null);
+      setDescText(null);
+      setDescSource(null);
+      try {
+        const res = await fetchGenderDiff({ name: selected.name, dexId: selected.dexId });
+        setDescText(res.description || null);
+        setDescSource((res as any).sourceUrl || null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to load description";
+        setDescError(msg);
+      } finally {
+        setDescLoading(false);
+      }
+    };
+    load();
+  }, [open, selected?.name, selected?.dexId, fetchGenderDiff]);
 
   return (
     <div className="w-full">
@@ -225,13 +261,65 @@ export function GenderDiffGrid({ species }: Props) {
               </div>
             </div>
 
-            {/* Differences section with Bulbapedia link */}
+            {/* Differences section with Bulbapedia link and description */}
             <div className="mt-5 p-4 bg-muted/30 rounded-lg">
-              <h4 className="font-semibold mb-2">Differences</h4>
-              <p className="text-sm text-muted-foreground">
-                This species exhibits gender-based visual differences. For a detailed description, visit the Bulbapedia entry.
-              </p>
+              <h4 className="font-semibold mb-2">Gender Differences</h4>
 
+              {/* Loading indicator for description */}
+              {descLoading && (
+                <div className="mt-2 text-xs text-muted-foreground flex items-center gap-2">
+                  <span className="inline-flex h-6 w-6 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md shadow-primary/30 items-center justify-center">
+                    <img
+                      src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
+                      alt="Loading Pokéball"
+                      className="h-4 w-4 animate-bounce-spin"
+                    />
+                  </span>
+                  Fetching description…
+                </div>
+              )}
+
+              {/* Error for description */}
+              {descError && (
+                <div className="mt-2">
+                  <Alert>
+                    <AlertDescription className="flex items-center justify-between gap-2">
+                      <span className="text-xs">{descError}</span>
+                      {selected?.name && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            // re-trigger by toggling open state
+                            setDescLoading(true);
+                            setDescError(null);
+                            fetchGenderDiff({ name: selected.name!, dexId: selected.dexId! })
+                              .then((res) => {
+                                setDescText(res.description || null);
+                                setDescSource((res as any).sourceUrl || null);
+                              })
+                              .catch((e) => setDescError(e instanceof Error ? e.message : "Failed to load description"))
+                              .finally(() => setDescLoading(false));
+                          }}
+                          className="gap-2"
+                        >
+                          <RotateCw className="h-4 w-4" />
+                          Retry
+                        </Button>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
+
+              {/* Description text */}
+              {!descLoading && !descError && (
+                <p className="text-sm text-muted-foreground whitespace-pre-line">
+                  {descText || "No known visual gender differences."}
+                </p>
+              )}
+
+              {/* Existing reachability check UI for Bulbapedia */}
               {bpLoading && (
                 <div className="mt-2 text-xs text-muted-foreground">
                   Checking Bulbapedia…
@@ -258,8 +346,9 @@ export function GenderDiffGrid({ species }: Props) {
                 </div>
               )}
 
+              {/* Links */}
               {selected && (
-                <div className="mt-3">
+                <div className="mt-3 flex items-center gap-3 flex-wrap">
                   <Button asChild size="sm" variant="outline" className="gap-2">
                     <a
                       href={bulbapediaUrl(selected.name)}
@@ -270,6 +359,21 @@ export function GenderDiffGrid({ species }: Props) {
                       View details on Bulbapedia
                     </a>
                   </Button>
+                  {descSource && (
+                    <a
+                      href={descSource}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-muted-foreground underline underline-offset-4"
+                    >
+                      Descriptions sourced from Bulbapedia
+                    </a>
+                  )}
+                  {!descSource && (
+                    <span className="text-xs text-muted-foreground">
+                      Descriptions sourced from Bulbapedia
+                    </span>
+                  )}
                 </div>
               )}
             </div>
