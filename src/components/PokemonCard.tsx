@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Heart, Star } from "lucide-react";
+import { Heart, Star, X, Gem } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,11 @@ export function PokemonCard({
   const isGmax = (() => {
     const n = pokemon.name.toLowerCase();
     return n.includes("gmax") || n.includes("gigantamax");
+  })();
+
+  const isMega = (() => {
+    const n = pokemon.name.toLowerCase();
+    return n.includes("mega");
   })();
 
   const gmaxMove = (() => {
@@ -106,8 +111,17 @@ export function PokemonCard({
           <div className="relative mb-4 flex justify-center">
             {isGmax && (
               <div className="absolute -top-1 -left-1">
-                <Badge className="rounded-full bg-purple-600/90 text-white border-purple-500/80 px-2 py-0.5 text-[10px] shadow">
+                <Badge className="rounded-full bg-red-600/95 text-white border-red-500/80 px-2 py-0.5 text-[10px] shadow inline-flex items-center gap-1">
+                  <X className="h-3 w-3" />
                   G-MAX
+                </Badge>
+              </div>
+            )}
+            {isMega && (
+              <div className="absolute -top-1 -right-1">
+                <Badge className="rounded-full bg-yellow-500/90 text-white border-yellow-400/80 px-2 py-0.5 text-[10px] shadow inline-flex items-center gap-1">
+                  <Gem className="h-3 w-3" />
+                  MEGA
                 </Badge>
               </div>
             )}

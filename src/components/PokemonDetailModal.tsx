@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Heart, Ruler, Weight, Zap, Shield, Sword, Activity } from "lucide-react";
+import { X, Heart, Ruler, Weight, Zap, Shield, Sword, Activity, Gem } from "lucide-react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Dialog,
@@ -185,6 +185,11 @@ export function PokemonDetailModal({
     return n.includes("gmax") || n.includes("gigantamax");
   })();
 
+  const isMega = (() => {
+    const n = String(data?.name ?? "").toLowerCase();
+    return n.includes("mega");
+  })();
+
   const gmaxMove: string | undefined = (() => {
     if (!isGmax) return undefined;
     const lower = String(data?.name ?? "").toLowerCase();
@@ -260,8 +265,14 @@ export function PokemonDetailModal({
                 <span className="text-sm font-mono text-muted-foreground">
                   #{formatPokemonId(pokemon.pokemonId)}
                 </span>
-                <DialogTitle className="text-2xl font-bold tracking-tight">
+                <DialogTitle className="text-2xl font-bold tracking-tight flex items-center gap-2">
                   {formatPokemonName(pokemon.name)}
+                  {isMega && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/90 text-white border border-yellow-400/70 px-2 py-0.5 text-[10px] shadow">
+                      <Gem className="h-3 w-3" />
+                      MEGA
+                    </span>
+                  )}
                 </DialogTitle>
               </div>
               <div className="flex items-center gap-2">
@@ -333,7 +344,8 @@ export function PokemonDetailModal({
                   {/* G-MAX badge */}
                   {isGmax && (
                     <div className="absolute -top-2 -left-2">
-                      <span className="rounded-full bg-purple-600/95 text-white border border-purple-400/70 px-2 py-0.5 text-[10px] shadow">
+                      <span className="rounded-full bg-red-600/95 text-white border border-red-400/70 px-2 py-0.5 text-[10px] shadow flex items-center gap-1">
+                        <X className="h-3 w-3" />
                         G-MAX
                       </span>
                     </div>
@@ -517,39 +529,6 @@ export function PokemonDetailModal({
                         <div className="font-medium">{data.baseExperience}</div>
                       </div>
                     )}
-                  </div>
-                )}
-
-                {/* Moves (collapsible) */}
-                {movesSafe.length > 0 && (
-                  <div>
-                    <Collapsible>
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-semibold">Moves</h4>
-                        <CollapsibleTrigger asChild>
-                          <Button variant="outline" size="sm">
-                            Show ({movesSafe.length})
-                          </Button>
-                        </CollapsibleTrigger>
-                      </div>
-                      <CollapsibleContent className="mt-3">
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                          {movesSafe
-                            .slice(0, 18)
-                            .sort((a, b) => a.localeCompare(b))
-                            .map((m, i) => (
-                              <Badge key={`${m}-${i}`} variant="secondary" className="justify-start">
-                                {String(m).replace("-", " ")}
-                              </Badge>
-                            ))}
-                        </div>
-                        {movesSafe.length > 18 && (
-                          <div className="mt-2 text-xs text-muted-foreground">
-                            +{movesSafe.length - 18} more
-                          </div>
-                        )}
-                      </CollapsibleContent>
-                    </Collapsible>
                   </div>
                 )}
               </div>
