@@ -3,7 +3,6 @@ import { genderDiffSpecies } from "@/lib/genderDiffSpecies";
 import { useGenderDiffPokemon, spriteFromDexId } from "@/lib/useGenderDiffPokemon";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RotateCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -160,7 +159,17 @@ export function GenderDiffGrid({ species }: Props) {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-sm font-mono text-muted-foreground">#{String(p.dexId).padStart(4, "0")}</span>
-                  <Badge variant="secondary">Gender Diff</Badge>
+                  <span
+                    title="Gender Differences"
+                    aria-label="Gender Differences"
+                    className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-pink-500/40"
+                  >
+                    <img
+                      src="https://harmless-tapir-303.convex.cloud/api/storage/d3256155-fdbb-486b-b117-e4850f259ab5"
+                      alt="Gender Differences"
+                      className="h-6 w-6 object-contain drop-shadow"
+                    />
+                  </span>
                 </div>
 
                 <div className="w-full flex items-center justify-center mb-3">
