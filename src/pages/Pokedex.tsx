@@ -543,6 +543,14 @@ export default function Pokedex() {
 
       // Default list auto-fetch
       if (hasMore && !isLoadingMore) {
+        // Start background backfill if dataset is incomplete to avoid hitting "No more Pokémon"
+        const totalNow = pokemonData?.total ?? 0;
+        if (totalNow < 1025 && !isRefreshing) {
+          setIsRefreshing(true);
+          const promise = fetchPokemonData({ limit: 1025, offset: 0 });
+          promise.finally(() => setIsRefreshing(false));
+        }
+
         setIsLoadingMore(true);
         setOffset((o) => o + BATCH_LIMIT);
       }
@@ -824,6 +832,15 @@ export default function Pokedex() {
                           className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                           onClick={() => {
                             if (isLoadingMore) return;
+
+                            // Ensure the rest of the Pokédex is being backfilled in the background
+                            const totalNow = pokemonData?.total ?? 0;
+                            if (totalNow < 1025 && !isRefreshing) {
+                              setIsRefreshing(true);
+                              const promise = fetchPokemonData({ limit: 1025, offset: 0 });
+                              promise.finally(() => setIsRefreshing(false));
+                            }
+
                             setIsLoadingMore(true);
                             setOffset((o) => o + BATCH_LIMIT);
                           }}
