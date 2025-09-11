@@ -195,7 +195,7 @@ export default function Pokedex() {
   });
 
   // Fetch next batch of species -> varieties -> pokemon details; append to altList
-  const fetchNextAltBatch = async (speciesCount = 4) => {
+  const fetchNextAltBatch = async (speciesCount = 12) => {
     if (!altQueueRef.current || altQueueRef.current.length === 0) {
       setAltHasMore(false);
       return;
@@ -218,8 +218,8 @@ export default function Pokedex() {
           const pokeName = v?.pokemon?.name;
           if (!pokeName) continue;
 
-          // gentle pacing
-          await delay(60);
+          // faster pacing
+          await delay(20);
           try {
             const p = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${pokeName}`);
             results.push(buildPokemonFromEntry(p));
@@ -230,15 +230,27 @@ export default function Pokedex() {
       }
 
       // Dedup by pokemonId and sort by id
+      let newLen = 0; // track new total for auto-top-up
       setAltList((prev) => {
         const map: Record<number, Pokemon> = Object.create(null);
         for (const p of prev) map[p.pokemonId] = p;
         for (const p of results) map[p.pokemonId] = p;
         const merged = Object.values(map).sort((a, b) => a.pokemonId - b.pokemonId);
+        newLen = merged.length;
         return merged;
       });
 
       setAltHasMore(Boolean(altQueueRef.current && altQueueRef.current.length > 0));
+
+      // Auto-fetch more until at least 30 are loaded (if queue remains)
+      if (newLen < 30 && altQueueRef.current && altQueueRef.current.length > 0) {
+        setTimeout(() => {
+          // call again with same larger batch size
+          fetchNextAltBatch(12).catch(() => {
+            toast.error("Failed to load more alternate forms.");
+          });
+        }, 0);
+      }
     } finally {
       setAltLoading(false);
     }
@@ -258,8 +270,8 @@ export default function Pokedex() {
       setAltList([]);
       setAltHasMore(altQueueRef.current.length > 0);
 
-      // prime first batch
-      fetchNextAltBatch(5).catch(() => {
+      // prime a larger first batch for faster initial content
+      fetchNextAltBatch(12).catch(() => {
         toast.error("Failed to load alternate forms. Try again.");
       });
     } else {
