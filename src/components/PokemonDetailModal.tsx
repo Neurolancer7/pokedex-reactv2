@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { formatPokemonId, formatPokemonName, getTypeColor, calculateStatPercentage } from "@/lib/pokemon-api";
 import type { Pokemon } from "@/lib/pokemon-api";
+import { useEffect, useState } from "react";
 
 interface PokemonDetailModalProps {
   pokemon: Pokemon | null;
@@ -38,6 +39,126 @@ export function PokemonDetailModal({
   hasNext,
 }: PokemonDetailModalProps) {
   if (!pokemon) return null;
+
+  const [enhanced, setEnhanced] = useState<Pokemon | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    // Reset on pokemon change
+    setEnhanced(null);
+
+    // Determine if fields are missing from cached data
+    const needsDetails =
+      !pokemon.stats?.length ||
+      !pokemon.abilities?.length ||
+      !pokemon.sprites?.officialArtwork ||
+      !pokemon.species?.flavorText;
+
+    if (!needsDetails) return;
+
+    const nameOrId = String(pokemon.name || pokemon.pokemonId);
+
+    const fetchJson = async (url: string) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Failed ${res.status} ${url}`);
+      return res.json();
+    };
+
+    const normalize = (base: Pokemon, detail: any, species: any): Pokemon => {
+      const types: string[] = Array.isArray(detail?.types)
+        ? detail.types.map((t: any) => String(t?.type?.name ?? "")).filter(Boolean)
+        : base.types ?? [];
+
+      const abilities: Array<{ name: string; isHidden: boolean }> = Array.isArray(detail?.abilities)
+        ? detail.abilities.map((a: any) => ({
+            name: String(a?.ability?.name ?? ""),
+            isHidden: Boolean(a?.is_hidden),
+          })).filter((a: any) => a.name)
+        : Array.isArray(base.abilities)
+          ? base.abilities.map((a: any) =>
+              typeof a === "string" ? { name: a, isHidden: false } : { name: String(a?.name ?? ""), isHidden: Boolean(a?.isHidden) }
+            ).filter((a: any) => a.name)
+          : [];
+
+      const stats: Array<{ name: string; baseStat: number; effort: number }> = Array.isArray(detail?.stats)
+        ? detail.stats.map((s: any) => ({
+            name: String(s?.stat?.name ?? ""),
+            baseStat: Number(s?.base_stat ?? 0),
+            effort: Number(s?.effort ?? 0),
+          })).filter((s: any) => s.name)
+        : Array.isArray(base.stats)
+          ? base.stats.map((s: any) => ({
+              name: String(s?.name ?? ""),
+              baseStat: Number(s?.baseStat ?? s?.value ?? 0),
+              effort: Number(s?.effort ?? 0),
+            })).filter((s: any) => s.name)
+          : [];
+
+      const sprites = {
+        frontDefault: detail?.sprites?.front_default ?? base.sprites?.frontDefault,
+        frontShiny: detail?.sprites?.front_shiny ?? base.sprites?.frontShiny,
+        officialArtwork: detail?.sprites?.other?.["official-artwork"]?.front_default ?? base.sprites?.officialArtwork,
+      };
+
+      // Species normalization
+      const pickEnglishFlavor = () => {
+        const entries = Array.isArray(species?.flavor_text_entries) ? species.flavor_text_entries : [];
+        const en = entries.find((e: any) => e?.language?.name === "en");
+        const text = String(en?.flavor_text ?? "").replace(/\f/g, " ").replace(/\n/g, " ").trim();
+        return text || base.species?.flavorText;
+      };
+
+      const speciesOut = {
+        flavorText: pickEnglishFlavor(),
+        genus: (() => {
+          const g = Array.isArray(species?.genera)
+            ? species.genera.find((x: any) => x?.language?.name === "en")?.genus
+            : undefined;
+          return g ?? base.species?.genus;
+        })(),
+        captureRate: typeof species?.capture_rate === "number" ? species.capture_rate : base.species?.captureRate,
+        baseHappiness: typeof species?.base_happiness === "number" ? species.base_happiness : base.species?.baseHappiness,
+        growthRate: String(species?.growth_rate?.name ?? base.species?.growthRate ?? ""),
+        habitat: String(species?.habitat?.name ?? base.species?.habitat ?? ""),
+        evolutionChainId: (() => {
+          const url: string | undefined = species?.evolution_chain?.url;
+          if (!url) return base.species?.evolutionChainId;
+          const m = url.match(/\/(\d+)\/?$/);
+          return m ? Number(m[1]) : base.species?.evolutionChainId;
+        })(),
+      };
+
+      return {
+        ...base,
+        baseExperience: typeof detail?.base_experience === "number" ? detail.base_experience : base.baseExperience,
+        height: typeof detail?.height === "number" ? detail.height : base.height,
+        weight: typeof detail?.weight === "number" ? detail.weight : base.weight,
+        types,
+        abilities,
+        stats,
+        sprites,
+        species: speciesOut,
+      };
+    };
+
+    (async () => {
+      try {
+        const [detail, species] = await Promise.all([
+          fetchJson(`https://pokeapi.co/api/v2/pokemon/${nameOrId}`),
+          fetchJson(`https://pokeapi.co/api/v2/pokemon-species/${nameOrId}`),
+        ]);
+        if (!mounted) return;
+        setEnhanced(normalize(pokemon, detail, species));
+      } catch {
+        // Best-effort enhancement; ignore errors and keep base
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [pokemon]);
 
   const handleFavoriteClick = () => {
     onFavoriteToggle?.(pokemon.pokemonId);
@@ -116,12 +237,17 @@ export function PokemonDetailModal({
                 {/* Pokemon Image */}
                 <div className="relative">
                   <div className="w-full aspect-square bg-gradient-to-br from-muted/50 to-muted rounded-lg flex items-center justify-center">
-                    {pokemon.sprites.officialArtwork || pokemon.sprites.frontDefault ? (
+                    {(enhanced?.sprites?.officialArtwork || enhanced?.sprites?.frontDefault || pokemon.sprites.officialArtwork || pokemon.sprites.frontDefault) ? (
                       <motion.img
                         initial={{ scale: 0.8, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         transition={{ type: "spring", stiffness: 200 }}
-                        src={pokemon.sprites.officialArtwork || pokemon.sprites.frontDefault}
+                        src={
+                          enhanced?.sprites?.officialArtwork ||
+                          enhanced?.sprites?.frontDefault ||
+                          pokemon.sprites.officialArtwork ||
+                          pokemon.sprites.frontDefault
+                        }
                         alt={pokemon.name}
                         className="w-4/5 h-4/5 object-contain"
                       />
@@ -133,7 +259,7 @@ export function PokemonDetailModal({
 
                 {/* Types */}
                 <div className="flex gap-2 justify-center">
-                  {(pokemon.types ?? []).map((type) => (
+                  {(enhanced?.types ?? pokemon.types ?? []).map((type) => (
                     <Badge
                       key={type}
                       variant="secondary"
@@ -154,21 +280,21 @@ export function PokemonDetailModal({
                   <div className="text-center p-3 bg-muted/50 rounded-lg">
                     <Ruler className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
                     <div className="text-sm text-muted-foreground">Height</div>
-                    <div className="font-semibold">{(pokemon.height / 10).toFixed(1)}m</div>
+                    <div className="font-semibold">{(enhanced?.height ?? pokemon.height / 10).toFixed(1)}m</div>
                   </div>
                   <div className="text-center p-3 bg-muted/50 rounded-lg">
                     <Weight className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
                     <div className="text-sm text-muted-foreground">Weight</div>
-                    <div className="font-semibold">{(pokemon.weight / 10).toFixed(1)}kg</div>
+                    <div className="font-semibold">{(enhanced?.weight ?? pokemon.weight / 10).toFixed(1)}kg</div>
                   </div>
                 </div>
 
                 {/* Description */}
-                {pokemon.species?.flavorText && (
+                {(enhanced?.species?.flavorText || pokemon.species?.flavorText) && (
                   <div className="p-4 bg-muted/30 rounded-lg">
                     <h4 className="font-semibold mb-2">Description</h4>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      {pokemon.species.flavorText}
+                      {enhanced?.species?.flavorText ?? pokemon.species!.flavorText}
                     </p>
                   </div>
                 )}
@@ -183,7 +309,7 @@ export function PokemonDetailModal({
                     Base Stats
                   </h4>
                   <div className="space-y-3">
-                    {(pokemon.stats ?? []).map((stat) => {
+                    {(enhanced?.stats ?? pokemon.stats ?? []).map((stat) => {
                       const s: any = stat as any;
                       const IconComponent = statIcons[(s?.name as keyof typeof statIcons) ?? "hp"] || Activity;
                       const base = Number(s?.baseStat ?? s?.value ?? 0);
@@ -216,7 +342,7 @@ export function PokemonDetailModal({
                 <div>
                   <h4 className="font-semibold mb-3">Abilities</h4>
                   <div className="space-y-2">
-                    {(pokemon.abilities ?? []).map((ability, index) => {
+                    {(enhanced?.abilities ?? pokemon.abilities ?? []).map((ability, index) => {
                       const a: any = ability as any;
                       const name = typeof a === "string" ? a : String(a?.name ?? "");
                       const isHidden = typeof a === "object" ? Boolean(a?.isHidden) : false;
@@ -241,30 +367,30 @@ export function PokemonDetailModal({
                 </div>
 
                 {/* Additional Info */}
-                {pokemon.species && (
+                {(enhanced?.species ?? pokemon.species) && (
                   <div className="grid grid-cols-2 gap-4 text-sm">
-                    {pokemon.species.genus && (
+                    {(enhanced?.species?.genus || pokemon.species?.genus) && (
                       <div>
                         <div className="text-muted-foreground">Species</div>
-                        <div className="font-medium">{pokemon.species.genus}</div>
+                        <div className="font-medium">{enhanced?.species?.genus ?? pokemon.species!.genus}</div>
                       </div>
                     )}
-                    {pokemon.species.habitat && (
+                    {(enhanced?.species?.habitat || pokemon.species?.habitat) && (
                       <div>
                         <div className="text-muted-foreground">Habitat</div>
-                        <div className="font-medium capitalize">{pokemon.species.habitat}</div>
+                        <div className="font-medium capitalize">{enhanced?.species?.habitat ?? pokemon.species!.habitat}</div>
                       </div>
                     )}
-                    {pokemon.species.captureRate !== undefined && (
+                    {(enhanced?.species?.captureRate !== undefined || pokemon.species?.captureRate !== undefined) && (
                       <div>
                         <div className="text-muted-foreground">Capture Rate</div>
-                        <div className="font-medium">{pokemon.species.captureRate}</div>
+                        <div className="font-medium">{enhanced?.species?.captureRate ?? pokemon.species!.captureRate}</div>
                       </div>
                     )}
-                    {pokemon.baseExperience && (
+                    {(enhanced?.baseExperience ?? pokemon.baseExperience) && (
                       <div>
                         <div className="text-muted-foreground">Base EXP</div>
-                        <div className="font-medium">{pokemon.baseExperience}</div>
+                        <div className="font-medium">{enhanced?.baseExperience ?? pokemon.baseExperience}</div>
                       </div>
                     )}
                   </div>
