@@ -496,6 +496,24 @@ export default function Pokedex() {
     });
   }, [selectedFormCategory, items.length, showFavorites, fetchPokemonData, isRefreshing]);
 
+  // Backfill all Pokémon in default (All Forms) state to ensure full dataset is available for infinite scroll
+  useEffect(() => {
+    // Only in default list (not favorites, not alternate forms)
+    if (showFavorites) return;
+    if (selectedFormCategory === "alternate") return;
+    if (!pokemonData) return;
+    if (isRefreshing) return;
+
+    const total = pokemonData.total ?? 0;
+    // If some data exists but it's not the full dex yet, backfill in the background
+    if (total > 0 && total < 1025) {
+      setIsRefreshing(true);
+      const promise = fetchPokemonData({ limit: 1025, offset: 0 });
+      // We keep this silent to avoid toasting during normal scroll; just ensure data gets filled
+      promise.finally(() => setIsRefreshing(false));
+    }
+  }, [pokemonData, showFavorites, selectedFormCategory, fetchPokemonData, isRefreshing]);
+
   // Infinite scroll: auto-load when near bottom (fallback button remains)
   useEffect(() => {
     const THRESHOLD_PX = 400;
