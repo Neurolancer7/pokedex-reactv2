@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlternateForms } from "@/components/AlternateForms";
 
 import type { Pokemon } from "@/lib/pokemon-api";
+import { fetchGigantamaxList, type GigantamaxPokemon } from "@/lib/gigantamax";
 
 class ErrorBoundary extends React.Component<{ onRetry: () => void; children: React.ReactNode }, { hasError: boolean; errorMessage?: string }> {
   constructor(props: { onRetry: () => void; children: React.ReactNode }) {
@@ -103,6 +104,10 @@ export default function Pokedex() {
   const fetchedGenRef = useRef<Set<number>>(new Set());
   // Track form categories we've attempted to fetch
   const fetchedFormCategoryRef = useRef<Set<string>>(new Set());
+
+  // Gigantamax list state (client-side, uses lib/gigantamax.ts)
+  const [gmaxList, setGmaxList] = useState<Pokemon[]>([]);
+  const [gmaxLoading, setGmaxLoading] = useState(false);
 
   // Generation ID ranges used to auto-fetch when a region is selected but uncached
   const GEN_RANGES: Record<number, { start: number; end: number }> = {
@@ -411,6 +416,65 @@ export default function Pokedex() {
       setAltList([]);
       setAltHasMore(false);
       setAltLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFormCategory]);
+
+  // When switching into Gigantamax filter, load only the Gigantamax forms
+  useEffect(() => {
+    if (selectedFormCategory === "gigantamax") {
+      // Clear default/alt/mega contexts so only Gmax data shows
+      setItems([]);
+      setOffset(0);
+      setHasMore(false);
+      setIsLoadingMore(false);
+
+      altQueueRef.current = null;
+      setAltList([]);
+      setAltHasMore(false);
+      setAltLoading(false);
+
+      setMegaList([]);
+      setMegaLoading(false);
+
+      // Load Gmax list
+      setGmaxList([]);
+      setGmaxLoading(true);
+      (async () => {
+        try {
+          const list = await fetchGigantamaxList(5);
+          // Map GigantamaxPokemon -> Pokemon minimal fields for display
+          const mapped: Pokemon[] = list.map((g: GigantamaxPokemon) => ({
+            pokemonId: g.id,
+            name: g.name,
+            height: g.height,
+            weight: g.weight,
+            baseExperience: undefined,
+            types: g.types,
+            abilities: g.abilities.map((a) => ({ name: a, isHidden: false })),
+            stats: [],
+            sprites: {
+              officialArtwork: g.sprite,
+              frontDefault: undefined,
+              frontShiny: undefined,
+            },
+            moves: [],
+            generation: 8,
+            species: undefined,
+          }));
+          // Ensure stable order by national dex id
+          setGmaxList(mapped.sort((a, b) => a.pokemonId - b.pokemonId));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Failed to load Gigantamax data";
+          toast.error(msg);
+        } finally {
+          setGmaxLoading(false);
+        }
+      })();
+    } else {
+      // Leaving gigantaMax mode: reset gmax list
+      setGmaxList([]);
+      setGmaxLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFormCategory]);
@@ -741,7 +805,9 @@ export default function Pokedex() {
     ? [...altList].sort((a, b) => a.pokemonId - b.pokemonId)
     : (selectedFormCategory === "mega"
         ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId)
-        : (showFavorites ? (favorites || []) : items));
+        : (selectedFormCategory === "gigantamax"
+            ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId)
+            : (showFavorites ? (favorites || []) : items)));
 
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
   const isInitialLoading =
@@ -749,7 +815,9 @@ export default function Pokedex() {
       ? altList.length === 0 && (altLoading || isLoadingMore)
       : (selectedFormCategory === "mega"
           ? megaList.length === 0 && megaLoading
-          : (!showFavorites && pokemonData === undefined && items.length === 0));
+          : (selectedFormCategory === "gigantamax"
+              ? gmaxList.length === 0 && gmaxLoading
+              : (!showFavorites && pokemonData === undefined && items.length === 0)));
 
   const totalItems = showFavorites ? (favorites?.length ?? 0) : (pokemonData?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalItems / INITIAL_LIMIT));
@@ -963,6 +1031,27 @@ export default function Pokedex() {
                       />
                     </div>
                     <span className="sr-only">Loading Mega Evolutions…</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : selectedFormCategory === "gigantamax" ? (
+            <div className="mt-8 flex flex-col items-center gap-3">
+              {gmaxLoading ? (
+                <div
+                  className="w-full sm:w-auto flex items-center justify-center"
+                  aria-busy="true"
+                  aria-live="polite"
+                >
+                  <div className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg border border-white/10 flex items-center justify-center">
+                    <div className="h-9 w-9 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md shadow-primary/30 flex items-center justify-center animate-pulse">
+                      <img
+                        src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
+                        alt="Loading Pokéball"
+                        className="h-7 w-7 animate-bounce-spin drop-shadow"
+                      />
+                    </div>
+                    <span className="sr-only">Loading Gigantamax forms…</span>
                   </div>
                 </div>
               ) : null}
