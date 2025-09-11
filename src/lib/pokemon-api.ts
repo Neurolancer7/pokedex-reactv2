@@ -68,6 +68,16 @@ export function formatPokemonName(name: string): string {
 
   const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+  // Add: Gigantamax form names
+  if (lower.endsWith("-gmax")) {
+    const base = name.slice(0, -5); // remove "-gmax"
+    return `Gigantamax ${capitalize(base)}`;
+  }
+  if (lower.endsWith("-gigantamax")) {
+    const base = name.slice(0, -"gigantamax".length - 1); // remove "-gigantamax"
+    return `Gigantamax ${capitalize(base)}`;
+  }
+
   if (lower.endsWith("-mega-x")) {
     const base = name.slice(0, -7); // remove "-mega-x"
     return `Mega-${capitalize(base)} X`;

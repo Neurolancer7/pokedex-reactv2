@@ -24,6 +24,11 @@ export function PokemonCard({
     onFavoriteToggle?.(pokemon.pokemonId);
   };
 
+  const isGmax = (() => {
+    const n = pokemon.name.toLowerCase();
+    return n.includes("gmax") || n.includes("gigantamax");
+  })();
+
   return (
     <motion.div
       whileHover={{ y: -4, scale: 1.02 }}
@@ -56,6 +61,13 @@ export function PokemonCard({
 
           {/* Pokemon Image */}
           <div className="relative mb-4 flex justify-center">
+            {isGmax && (
+              <div className="absolute -top-1 -left-1">
+                <Badge className="rounded-full bg-purple-600/90 text-white border-purple-500/80 px-2 py-0.5 text-[10px] shadow">
+                  G-MAX
+                </Badge>
+              </div>
+            )}
             <div className="w-24 h-24 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted rounded-full">
               {pokemon.sprites.officialArtwork || pokemon.sprites.frontDefault ? (
                 <img

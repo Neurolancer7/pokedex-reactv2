@@ -446,7 +446,8 @@ export default function Pokedex() {
           // Map GigantamaxPokemon -> Pokemon minimal fields for display
           const mapped: Pokemon[] = list.map((g: GigantamaxPokemon) => ({
             pokemonId: g.id,
-            name: g.name,
+            // Use the actual gmax form name to drive UI formatting ("Gigantamax Charizard")
+            name: g.gmaxFormName,
             height: g.height,
             weight: g.weight,
             baseExperience: undefined,
