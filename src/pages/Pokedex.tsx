@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import { useQuery as useConvexQuery, useMutation as useConvexMutation, useAction } from "convex/react";
 import { useAuth } from "@/hooks/use-auth";
+import { useRegionalForms } from "@/lib/useRegionalForms";
 
 import { PokemonHeader } from "@/components/PokemonHeader";
 import { PokemonSearch } from "@/components/PokemonSearch";
@@ -481,9 +482,12 @@ export default function Pokedex() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFormCategory]);
 
+  // Regional forms hook (base + official regionals)
+  const { flatList: regionalFlatList, isLoading: regionalLoading } = useRegionalForms();
+
   const pokemonData = useConvexQuery(
     api.pokemon.list,
-    selectedFormCategory === "gender-diff"
+    selectedFormCategory === "gender-diff" || selectedFormCategory === "regional"
       ? "skip"
       : {
           limit: showFavorites ? 0 : BATCH_LIMIT,
@@ -497,7 +501,7 @@ export default function Pokedex() {
 
   const nextPokemonData = useConvexQuery(
     api.pokemon.list,
-    selectedFormCategory === "gender-diff"
+    selectedFormCategory === "gender-diff" || selectedFormCategory === "regional"
       ? "skip"
       : {
           limit: showFavorites ? 0 : BATCH_LIMIT,
@@ -848,7 +852,9 @@ export default function Pokedex() {
         ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId)
         : (selectedFormCategory === "gigantamax"
             ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId)
-            : (showFavorites ? (favorites || []) : items)));
+            : (selectedFormCategory === "regional"
+                ? regionalFlatList
+                : (showFavorites ? (favorites || []) : items))));
 
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
   const isInitialLoading =
@@ -858,7 +864,9 @@ export default function Pokedex() {
           ? megaList.length === 0 && megaLoading
           : (selectedFormCategory === "gigantamax"
               ? gmaxList.length === 0 && gmaxLoading
-              : (!showFavorites && pokemonData === undefined && items.length === 0)));
+              : (selectedFormCategory === "regional"
+                  ? regionalLoading && (!showFavorites)
+                  : (!showFavorites && pokemonData === undefined && items.length === 0))));
 
   const totalItems = showFavorites ? (favorites?.length ?? 0) : (pokemonData?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalItems / INITIAL_LIMIT));
