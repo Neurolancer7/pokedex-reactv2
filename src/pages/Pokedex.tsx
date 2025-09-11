@@ -132,7 +132,7 @@ export default function Pokedex() {
   async function delay(ms: number) {
     return new Promise((res) => setTimeout(res, ms));
   }
-  async function fetchJsonWithRetry<T>(url: string, attempts = 3, baseDelayMs = 250): Promise<T> {
+  async function fetchJsonWithRetry<T>(url: string, attempts = 3, baseDelayMs = 150): Promise<T> {
     let lastErr: unknown;
     for (let i = 0; i < attempts; i++) {
       try {
@@ -196,7 +196,7 @@ export default function Pokedex() {
 
   // Fetch next batch of species -> varieties -> pokemon details; append to altList
   // - Returns the new total length after merge
-  const fetchNextAltBatch = async (speciesCount = 12): Promise<number> => {
+  const fetchNextAltBatch = async (speciesCount = 16): Promise<number> => {
     if (!altQueueRef.current || altQueueRef.current.length === 0) {
       setAltHasMore(false);
       return altList.length;
@@ -206,27 +206,38 @@ export default function Pokedex() {
     setAltLoading(true);
     try {
       const batch = altQueueRef.current.splice(0, speciesCount);
-      const results: Pokemon[] = [];
 
-      for (const speciesName of batch) {
-        // species -> varieties
-        const speciesData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${speciesName}`);
-        const varieties: Array<{ pokemon: { name: string; url: string } }> =
-          Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
+      // Process species in parallel to speed up
+      const settled = await Promise.allSettled(
+        batch.map(async (speciesName) => {
+          // species -> varieties
+          const speciesData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${speciesName}`);
+          const varieties: Array<{ pokemon: { name: string; url: string } }> =
+            Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
 
-        // For each variety, fetch the concrete pokemon data
-        for (const v of varieties) {
-          const pokeName = v?.pokemon?.name;
-          if (!pokeName) continue;
+          // Fetch all variety pokemon in parallel (no per-item delay)
+          const pokemonSettled = await Promise.allSettled(
+            varieties
+              .map((v) => v?.pokemon?.name)
+              .filter((name): name is string => Boolean(name))
+              .map(async (pokeName) => {
+                const p = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${pokeName}`);
+                return buildPokemonFromEntry(p);
+              })
+          );
 
-          // faster pacing
-          await delay(20);
-          try {
-            const p = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${pokeName}`);
-            results.push(buildPokemonFromEntry(p));
-          } catch {
-            // skip broken entries quietly
+          const speciesResults: Pokemon[] = [];
+          for (const r of pokemonSettled) {
+            if (r.status === "fulfilled") speciesResults.push(r.value);
           }
+          return speciesResults;
+        })
+      );
+
+      const results: Pokemon[] = [];
+      for (const r of settled) {
+        if (r.status === "fulfilled" && Array.isArray(r.value)) {
+          results.push(...r.value);
         }
       }
 
@@ -252,9 +263,9 @@ export default function Pokedex() {
   // Load until at least `target` total items are present (or queue is exhausted)
   const loadAltUntil = async (targetTotal: number) => {
     try {
-      // Use bigger species batch to speed up
+      // Use a bigger species batch to speed up filling to the target quickly
       while ((altList.length < targetTotal) && altQueueRef.current && altQueueRef.current.length > 0) {
-        const newLen = await fetchNextAltBatch(20);
+        const newLen = await fetchNextAltBatch(24);
         if (newLen >= targetTotal) break;
         // small pause to yield UI
         await delay(0);
