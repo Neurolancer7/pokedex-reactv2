@@ -263,6 +263,131 @@ function classifyFormCategories(
   }
 }
 
+// Add: Internal action to fetch and cache specific Gigantamax forms reliably
+export const processGigantamaxForms = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    // Canonical species base names for Gmax forms
+    const baseNames: string[] = [
+      "venusaur",
+      "charizard",
+      "blastoise",
+      "butterfree",
+      "pikachu",
+      "meowth",
+      "machamp",
+      "gengar",
+      "kingler",
+      "lapras",
+      "eevee",
+      "snorlax",
+      "garbodor",
+      "melmetal",
+      "rillaboom",
+      "cinderace",
+      "inteleon",
+      "corviknight",
+      "orbeetle",
+      "drednaw",
+      "coalossal",
+      "flapple",
+      "appletun",
+      "sandaconda",
+      "toxtricity",
+      "centiskorch",
+      "hatterene",
+      "grimmsnarl",
+      "alcremie",
+      "copperajah",
+      "duraludon",
+    ];
+
+    // Reduced concurrency for stability
+    const CONCURRENCY = 3;
+
+    const names = baseNames.map((n) => `${n}-gmax`);
+
+    for (let i = 0; i < names.length; i += CONCURRENCY) {
+      const batch = names.slice(i, i + CONCURRENCY);
+      await Promise.all(
+        batch.map(async (formName) => {
+          try {
+            const formUrl = `https://pokeapi.co/api/v2/pokemon-form/${formName}`;
+            const form = await fetchJson(formUrl, "PokéAPI pokemon-form Gmax details");
+
+            const formId = Number(form?.id);
+            const pokemonName = String(form?.pokemon?.name ?? "").toLowerCase();
+            const pokemonUrl: string = String(form?.pokemon?.url ?? "");
+            const pokemonId = Number(pokemonUrl.split("/").slice(-2, -1)[0]);
+
+            if (!Number.isFinite(pokemonId) || pokemonId <= 0) return;
+
+            // Build sprite URLs with known patterns to avoid extra fetches
+            const sprites = {
+              frontDefault:
+                String(
+                  form?.sprites?.front_default ??
+                    `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`,
+                ),
+              frontShiny: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/${pokemonId}.png`,
+              officialArtwork: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${pokemonId}.png`,
+            };
+
+            const categories = classifyFormCategories(form, formName);
+
+            await ctx.runMutation(internal.pokemonInternal.upsertForm, {
+              formId,
+              formName,
+              pokemonName,
+              pokemonId,
+              categories,
+              isDefault: Boolean(form?.is_default),
+              isBattleOnly: Boolean(form?.is_battle_only),
+              formOrder: typeof form?.form_order === "number" ? form.form_order : undefined,
+              sprites,
+              versionGroup: String(form?.version_group?.name ?? ""),
+            });
+
+            await ctx.runMutation(internal.pokemonInternal.mergeFormTagsIntoPokemon, {
+              pokemonId,
+              categories,
+            });
+          } catch (e) {
+            console.error("processGigantamaxForms error for form:", formName, e);
+          }
+        }),
+      );
+
+      try {
+        await delay(30);
+      } catch {
+        // ignore pacing error
+      }
+    }
+  },
+});
+
+// Add: Public action to trigger Gmax caching on-demand from the UI
+export const ensureGigantamaxForms = action({
+  args: {},
+  handler: async (ctx) => {
+    try {
+      await scheduleWithRetry(
+        ctx,
+        "processGigantamaxForms",
+        internal.pokemonData.processGigantamaxForms,
+        {},
+        5,
+        200,
+      );
+      return { success: true };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw withCode("E_SCHEDULE", `Failed to ensure Gigantamax forms: ${msg}`);
+    }
+  },
+});
+
 // Internal action: process a single page of /pokemon-form list
 export const crawlFormsProcessPage = internalAction({
   args: { offset: v.number(), limit: v.number() },
@@ -377,6 +502,8 @@ export const fetchAndCachePokemon = action({
       if (ids.length === 0) {
         // Schedule best-effort background tasks with retry
         await scheduleWithRetry(ctx, "processTypes", internal.pokemonData.processTypes, {}, 5, 200);
+        // Also ensure Gmax forms in background
+        await scheduleWithRetry(ctx, "processGigantamaxForms", internal.pokemonData.processGigantamaxForms, {}, 5, 200);
         await scheduleWithRetry(ctx, "crawlForms", internal.pokemonData.crawlForms, {}, 5, 200);
         return { success: true, scheduled: 0, cached: 0 };
       }
@@ -385,6 +512,9 @@ export const fetchAndCachePokemon = action({
       await scheduleWithRetry(ctx, "processTypes", internal.pokemonData.processTypes, {}, 5, 200);
       await delay(50);
       await scheduleWithRetry(ctx, "processAll", internal.pokemonData.processAll, { ids }, 5, 200);
+      await delay(50);
+      // Ensure specific Gmax forms quickly available for the filter
+      await scheduleWithRetry(ctx, "processGigantamaxForms", internal.pokemonData.processGigantamaxForms, {}, 5, 200);
       await delay(50);
       await scheduleWithRetry(ctx, "crawlForms", internal.pokemonData.crawlForms, {}, 5, 200);
 
