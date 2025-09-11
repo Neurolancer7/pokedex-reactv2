@@ -11,6 +11,18 @@ const REGIONAL_SPECIES: ReadonlySet<number> = new Set<number>([
   705, 706, 713, 724,
 ]);
 
+// Add: Canonical species IDs that have Gigantamax forms
+const GMAX_SPECIES: ReadonlySet<number> = new Set<number>([
+  // Kanto
+  3, 6, 9, 12, 25, 52, 68, 94, 99, 131, 133, 143,
+  // Unova
+  569,
+  // Mythical
+  809,
+  // Galar starters and others
+  812, 815, 818, 823, 826, 834, 839, 841, 842, 844, 849, 851, 858, 861, 869, 879, 884,
+]);
+
 // Add generation ID ranges as a fallback when generation-indexed lookup returns no rows
 const GEN_RANGES: Record<number, { start: number; end: number }> = {
   1: { start: 1, end: 151 },
@@ -188,6 +200,11 @@ export const list = query({
 
           if (wanted.has("regional")) {
             for (const id of REGIONAL_SPECIES) specificIds.add(id);
+          }
+
+          // Add: fallback include for Gigantamax-capable species so results show even if forms cache isn't ready
+          if (wanted.has("gigantamax")) {
+            for (const id of GMAX_SPECIES) specificIds.add(id);
           }
 
           results = results.filter((pokemon) => {
