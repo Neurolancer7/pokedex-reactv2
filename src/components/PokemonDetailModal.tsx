@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { formatPokemonId, formatPokemonName, getTypeColor, calculateStatPercentage } from "@/lib/pokemon-api";
 import type { Pokemon } from "@/lib/pokemon-api";
 import { useEffect, useState } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface PokemonDetailModalProps {
   pokemon: Pokemon | null;
@@ -41,14 +42,13 @@ export function PokemonDetailModal({
   if (!pokemon) return null;
 
   const [enhanced, setEnhanced] = useState<Pokemon | null>(null);
+  const [showShiny, setShowShiny] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-
-    // Reset on pokemon change
     setEnhanced(null);
+    setShowShiny(false);
 
-    // Determine if fields are missing from cached data
     const needsDetails =
       !pokemon.stats?.length ||
       !pokemon.abilities?.length ||
@@ -173,12 +173,38 @@ export function PokemonDetailModal({
     speed: Activity,
   };
 
+  const data = enhanced ?? pokemon;
+  const heightM = Number.isFinite(data?.height) ? (data!.height / 10).toFixed(1) : "–";
+  const weightKg = Number.isFinite(data?.weight) ? (data!.weight / 10).toFixed(1) : "–";
+  const spriteDefault = data?.sprites?.officialArtwork || data?.sprites?.frontDefault;
+  const spriteShiny = data?.sprites?.frontShiny || undefined;
+  const currentSprite = showShiny && spriteShiny ? spriteShiny : spriteDefault;
+
+  const typesSafe: string[] = Array.isArray(data?.types) ? data!.types : [];
+  const statsSafe: Array<{ name: string; baseStat: number; effort: number }> =
+    Array.isArray((data as any)?.stats)
+      ? (data as any).stats.map((s: any) => ({
+          name: String(s?.name ?? s?.stat?.name ?? ""),
+          baseStat: Number(s?.baseStat ?? s?.value ?? 0),
+          effort: Number(s?.effort ?? 0),
+        })).filter((s: any) => s.name)
+      : [];
+  const abilitiesSafe: Array<{ name: string; isHidden: boolean }> =
+    Array.isArray((data as any)?.abilities)
+      ? (data as any).abilities.map((a: any) =>
+          typeof a === "string"
+            ? { name: a, isHidden: false }
+            : { name: String(a?.name ?? a?.ability?.name ?? ""), isHidden: Boolean(a?.isHidden ?? a?.is_hidden) }
+        ).filter((a: any) => a.name)
+      : [];
+  const movesSafe: string[] = Array.isArray(data?.moves)
+    ? data!.moves.map((m: any) => (typeof m === "string" ? m : String(m?.move?.name ?? ""))).filter(Boolean)
+    : [];
+  const statTotal = statsSafe.reduce((sum, s) => sum + (Number.isFinite(s.baseStat) ? s.baseStat : 0), 0);
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] p-0">
-        <DialogDescription className="sr-only">
-          Detailed information about {formatPokemonName(pokemon.name)}
-        </DialogDescription>
+      <DialogContent className="max-w-2xl max-h[90vh] p-0">
         <ScrollArea className="max-h-[90vh]">
           <div className="p-6">
             {/* Header */}
@@ -234,20 +260,15 @@ export function PokemonDetailModal({
             <div className="grid md:grid-cols-2 gap-6">
               {/* Left Column - Image and Basic Info */}
               <div className="space-y-4">
-                {/* Pokemon Image */}
+                {/* Pokemon Image with Shiny toggle */}
                 <div className="relative">
                   <div className="w-full aspect-square bg-gradient-to-br from-muted/50 to-muted rounded-lg flex items-center justify-center">
-                    {(enhanced?.sprites?.officialArtwork || enhanced?.sprites?.frontDefault || pokemon.sprites.officialArtwork || pokemon.sprites.frontDefault) ? (
+                    {currentSprite ? (
                       <motion.img
                         initial={{ scale: 0.8, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         transition={{ type: "spring", stiffness: 200 }}
-                        src={
-                          enhanced?.sprites?.officialArtwork ||
-                          enhanced?.sprites?.frontDefault ||
-                          pokemon.sprites.officialArtwork ||
-                          pokemon.sprites.frontDefault
-                        }
+                        src={currentSprite}
                         alt={pokemon.name}
                         className="w-4/5 h-4/5 object-contain"
                       />
@@ -255,11 +276,25 @@ export function PokemonDetailModal({
                       <div className="text-6xl">❓</div>
                     )}
                   </div>
+
+                  {/* Shiny toggle control (only shown if shiny exists) */}
+                  {spriteShiny && (
+                    <div className="mt-3 flex items-center justify-center gap-2">
+                      <Button
+                        variant={showShiny ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setShowShiny((s) => !s)}
+                        aria-pressed={showShiny}
+                      >
+                        {showShiny ? "Showing Shiny" : "Show Shiny"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Types */}
                 <div className="flex gap-2 justify-center">
-                  {(enhanced?.types ?? pokemon.types ?? []).map((type) => (
+                  {typesSafe.map((type) => (
                     <Badge
                       key={type}
                       variant="secondary"
@@ -280,21 +315,21 @@ export function PokemonDetailModal({
                   <div className="text-center p-3 bg-muted/50 rounded-lg">
                     <Ruler className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
                     <div className="text-sm text-muted-foreground">Height</div>
-                    <div className="font-semibold">{(enhanced?.height ?? pokemon.height / 10).toFixed(1)}m</div>
+                    <div className="font-semibold">{heightM}m</div>
                   </div>
                   <div className="text-center p-3 bg-muted/50 rounded-lg">
                     <Weight className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
                     <div className="text-sm text-muted-foreground">Weight</div>
-                    <div className="font-semibold">{(enhanced?.weight ?? pokemon.weight / 10).toFixed(1)}kg</div>
+                    <div className="font-semibold">{weightKg}kg</div>
                   </div>
                 </div>
 
                 {/* Description */}
-                {(enhanced?.species?.flavorText || pokemon.species?.flavorText) && (
+                {(data?.species?.flavorText) && (
                   <div className="p-4 bg-muted/30 rounded-lg">
                     <h4 className="font-semibold mb-2">Description</h4>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      {enhanced?.species?.flavorText ?? pokemon.species!.flavorText}
+                      {data.species.flavorText}
                     </p>
                   </div>
                 )}
@@ -302,18 +337,32 @@ export function PokemonDetailModal({
 
               {/* Right Column - Stats and Details */}
               <div className="space-y-6">
-                {/* Base Stats */}
+                {/* Base Stats with total */}
                 <div>
                   <h4 className="font-semibold mb-4 flex items-center gap-2">
                     <Activity className="h-4 w-4" />
                     Base Stats
+                    {statTotal > 0 && (
+                      <span className="ml-auto text-sm text-muted-foreground">
+                        Total: <span className="font-semibold text-foreground">{statTotal}</span>
+                      </span>
+                    )}
                   </h4>
                   <div className="space-y-3">
-                    {(enhanced?.stats ?? pokemon.stats ?? []).map((stat) => {
-                      const s: any = stat as any;
-                      const IconComponent = statIcons[(s?.name as keyof typeof statIcons) ?? "hp"] || Activity;
-                      const base = Number(s?.baseStat ?? s?.value ?? 0);
-                      const name = String(s?.name ?? "stat");
+                    {statsSafe.map((stat) => {
+                      const name = String(stat?.name ?? "stat");
+                      const IconComponent = ((): any => {
+                        switch (name) {
+                          case "hp": return Activity;
+                          case "attack": return Sword;
+                          case "defense": return Shield;
+                          case "special-attack": return Zap;
+                          case "special-defense": return Shield;
+                          case "speed": return Activity;
+                          default: return Activity;
+                        }
+                      })();
+                      const base = Number(stat?.baseStat ?? 0);
                       const percentage = calculateStatPercentage(base);
 
                       return (
@@ -322,12 +371,10 @@ export function PokemonDetailModal({
                             <div className="flex items-center gap-2">
                               <IconComponent className="h-3 w-3 text-muted-foreground" />
                               <span className="capitalize font-medium">
-                                {name.replace('-', ' ')}
+                                {name.replace("-", " ")}
                               </span>
                             </div>
-                            <span className="font-mono font-semibold">
-                              {base}
-                            </span>
+                            <span className="font-mono font-semibold">{base}</span>
                           </div>
                           <Progress value={percentage} className="h-2" />
                         </div>
@@ -342,57 +389,84 @@ export function PokemonDetailModal({
                 <div>
                   <h4 className="font-semibold mb-3">Abilities</h4>
                   <div className="space-y-2">
-                    {(enhanced?.abilities ?? pokemon.abilities ?? []).map((ability, index) => {
-                      const a: any = ability as any;
-                      const name = typeof a === "string" ? a : String(a?.name ?? "");
-                      const isHidden = typeof a === "object" ? Boolean(a?.isHidden) : false;
-
-                      return (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-2 bg-muted/30 rounded"
-                        >
-                          <span className="capitalize font-medium">
-                            {name.replace('-', ' ')}
-                          </span>
-                          {isHidden && (
-                            <Badge variant="outline" className="text-xs">
-                              Hidden
-                            </Badge>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {abilitiesSafe.map((ability, index) => (
+                      <div
+                        key={`${ability.name}-${index}`}
+                        className="flex items-center justify-between p-2 bg-muted/30 rounded"
+                      >
+                        <span className="capitalize font-medium">
+                          {String(ability.name).replace("-", " ")}
+                        </span>
+                        {ability.isHidden && (
+                          <Badge variant="outline" className="text-xs">
+                            Hidden
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
 
                 {/* Additional Info */}
-                {(enhanced?.species ?? pokemon.species) && (
+                {(data?.species) && (
                   <div className="grid grid-cols-2 gap-4 text-sm">
-                    {(enhanced?.species?.genus || pokemon.species?.genus) && (
+                    {data.species.genus && (
                       <div>
                         <div className="text-muted-foreground">Species</div>
-                        <div className="font-medium">{enhanced?.species?.genus ?? pokemon.species!.genus}</div>
+                        <div className="font-medium">{data.species.genus}</div>
                       </div>
                     )}
-                    {(enhanced?.species?.habitat || pokemon.species?.habitat) && (
+                    {data.species.habitat && (
                       <div>
                         <div className="text-muted-foreground">Habitat</div>
-                        <div className="font-medium capitalize">{enhanced?.species?.habitat ?? pokemon.species!.habitat}</div>
+                        <div className="font-medium capitalize">{data.species.habitat}</div>
                       </div>
                     )}
-                    {(enhanced?.species?.captureRate !== undefined || pokemon.species?.captureRate !== undefined) && (
+                    {typeof data.species.captureRate === "number" && (
                       <div>
                         <div className="text-muted-foreground">Capture Rate</div>
-                        <div className="font-medium">{enhanced?.species?.captureRate ?? pokemon.species!.captureRate}</div>
+                        <div className="font-medium">{data.species.captureRate}</div>
                       </div>
                     )}
-                    {(enhanced?.baseExperience ?? pokemon.baseExperience) && (
+                    {(typeof data.baseExperience === "number") && (
                       <div>
                         <div className="text-muted-foreground">Base EXP</div>
-                        <div className="font-medium">{enhanced?.baseExperience ?? pokemon.baseExperience}</div>
+                        <div className="font-medium">{data.baseExperience}</div>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Moves (collapsible) */}
+                {movesSafe.length > 0 && (
+                  <div>
+                    <Collapsible>
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold">Moves</h4>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            Show ({movesSafe.length})
+                          </Button>
+                        </CollapsibleTrigger>
+                      </div>
+                      <CollapsibleContent className="mt-3">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {movesSafe
+                            .slice(0, 18)
+                            .sort((a, b) => a.localeCompare(b))
+                            .map((m, i) => (
+                              <Badge key={`${m}-${i}`} variant="secondary" className="justify-start">
+                                {String(m).replace("-", " ")}
+                              </Badge>
+                            ))}
+                        </div>
+                        {movesSafe.length > 18 && (
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            +{movesSafe.length - 18} more
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </Collapsible>
                   </div>
                 )}
               </div>
