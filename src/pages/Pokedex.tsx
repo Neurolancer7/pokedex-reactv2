@@ -565,24 +565,38 @@ export default function Pokedex() {
   };
 
   // Strengthen retry helper for transient Convex/Network hiccups
-  const runWithRetries = async <T,>(fn: () => Promise<T>, attempts = 5, delayMs = 800): Promise<T> => {
+  const runWithRetries = async <T,>(fn: () => Promise<T>, attempts = 7, baseDelayMs = 500): Promise<T> => {
     let lastErr: unknown;
+    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
     for (let i = 0; i < attempts; i++) {
       try {
         return await fn();
       } catch (err) {
         lastErr = err;
         const msg = err instanceof Error ? err.message : String(err);
+
+        // Treat known transient messages as retriable
         const retriable =
           /\bConnection lost while action was in flight\b/i.test(msg) ||
+          /\[CONVEX A\(/i.test(msg) ||
           /\bNetworkError\b/i.test(msg) ||
           /\bFailed to fetch\b/i.test(msg) ||
           /\bAbortError\b/i.test(msg) ||
           /\bfetch failed\b/i.test(msg) ||
           /\bETIMEDOUT\b/i.test(msg) ||
-          msg.includes("[CONVEX A("); // any Convex action transport blip
+          /\bECONNRESET\b/i.test(msg) ||
+          /\bEAI_AGAIN\b/i.test(msg);
+
         if (!retriable || i === attempts - 1) throw err;
-        await new Promise((res) => setTimeout(res, delayMs * Math.pow(2, i)));
+
+        // Jittered exponential backoff
+        const jitter = Math.floor(Math.random() * 150);
+        const delayMs = baseDelayMs * Math.pow(2, i) + jitter;
+
+        // For Convex transport blips, give it a bit more breathing room
+        const extra = /\bConnection lost while action was in flight\b/i.test(msg) ? 250 : 0;
+
+        await sleep(delayMs + extra);
       }
     }
     throw lastErr instanceof Error ? lastErr : new Error("Request failed");
