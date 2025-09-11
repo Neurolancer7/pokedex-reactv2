@@ -31,7 +31,8 @@ export function PokemonCard({
 
   const isMega = (() => {
     const n = pokemon.name.toLowerCase();
-    return n.includes("mega");
+    // Only match "mega" as a token (e.g., "-mega", "mega-", " mega ", start/end)
+    return /(?:^|[-\s])mega(?:$|[-\s])/.test(n);
   })();
 
   const gmaxMove = (() => {
