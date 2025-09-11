@@ -403,6 +403,32 @@ export const backfillFormTagsFromForms = internalMutation({
   },
 });
 
+export const hasTypes = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    // Use existing index to fetch a single row, avoiding full-table scan
+    const any = await ctx.db
+      .query("pokemonTypes")
+      .withIndex("by_name", (q) => q.gt("name", "")) // any row
+      .order("asc")
+      .take(1);
+    return any.length > 0;
+  },
+});
+
+export const hasForms = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    // Use existing index to fetch a single row, avoiding full-table scan
+    const any = await ctx.db
+      .query("pokemonForms")
+      .withIndex("by_form_id", (q) => q.gt("formId", 0)) // any row
+      .order("asc")
+      .take(1);
+    return any.length > 0;
+  },
+});
+
 function getGenerationFromId(id: number): number {
   if (id <= 151) return 1;
   if (id <= 251) return 2;

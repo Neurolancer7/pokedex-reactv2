@@ -498,13 +498,42 @@ export const fetchAndCachePokemon = action({
     const offset = args.offset || 0;
 
     try {
+      // NEW: check if types/forms already exist to avoid redundant scheduling that causes commit overload
+      let hasTypes = false;
+      let hasForms = false;
+      try {
+        [hasTypes, hasForms] = await Promise.all([
+          ctx.runQuery(internal.pokemonInternal.hasTypes, {}),
+          ctx.runQuery(internal.pokemonInternal.hasForms, {}),
+        ]);
+      } catch {
+        // If checks fail, default to scheduling but the rest of the logic handles retries/pacing
+        hasTypes = false;
+        hasForms = false;
+      }
+
       const ids: number[] = Array.from({ length: limit }, (_, i) => offset + i + 1).filter((id) => id <= 1025);
       if (ids.length === 0) {
-        // Schedule best-effort background tasks with retry
-        await scheduleWithRetry(ctx, "processTypes", internal.pokemonData.processTypes, {}, 5, 200);
-        // Also ensure Gmax forms in background
-        await scheduleWithRetry(ctx, "processGigantamaxForms", internal.pokemonData.processGigantamaxForms, {}, 5, 200);
-        await scheduleWithRetry(ctx, "crawlForms", internal.pokemonData.crawlForms, {}, 5, 200);
+        // Schedule best-effort background tasks with retry (guarded by presence checks)
+        if (!hasTypes) {
+          try {
+            await scheduleWithRetry(ctx, "processTypes", internal.pokemonData.processTypes, {}, 5, 200);
+          } catch (e) {
+            console.error("schedule processTypes (empty ids) error:", e);
+          }
+        }
+        if (!hasForms) {
+          try {
+            await scheduleWithRetry(ctx, "processGigantamaxForms", internal.pokemonData.processGigantamaxForms, {}, 5, 200);
+          } catch (e) {
+            console.error("schedule processGigantamaxForms (empty ids) error:", e);
+          }
+          try {
+            await scheduleWithRetry(ctx, "crawlForms", internal.pokemonData.crawlForms, {}, 5, 200);
+          } catch (e) {
+            console.error("schedule crawlForms (empty ids) error:", e);
+          }
+        }
 
         // New: backfill formTags from forms so filters like "regional"/"gender" work
         try {
@@ -517,14 +546,32 @@ export const fetchAndCachePokemon = action({
       }
 
       // Schedule in sequence with retry and gentle pacing to reduce burst load
-      await scheduleWithRetry(ctx, "processTypes", internal.pokemonData.processTypes, {}, 5, 200);
-      await delay(50);
+      if (!hasTypes) {
+        try {
+          await scheduleWithRetry(ctx, "processTypes", internal.pokemonData.processTypes, {}, 5, 200);
+          await delay(50);
+        } catch (e) {
+          console.error("schedule processTypes error:", e);
+        }
+      }
+
       await scheduleWithRetry(ctx, "processAll", internal.pokemonData.processAll, { ids }, 5, 200);
       await delay(50);
-      // Ensure specific Gmax forms quickly available for the filter
-      await scheduleWithRetry(ctx, "processGigantamaxForms", internal.pokemonData.processGigantamaxForms, {}, 5, 200);
-      await delay(50);
-      await scheduleWithRetry(ctx, "crawlForms", internal.pokemonData.crawlForms, {}, 5, 200);
+
+      if (!hasForms) {
+        // Ensure specific Gmax forms quickly available for the filter
+        try {
+          await scheduleWithRetry(ctx, "processGigantamaxForms", internal.pokemonData.processGigantamaxForms, {}, 5, 200);
+          await delay(50);
+        } catch (e) {
+          console.error("schedule processGigantamaxForms error:", e);
+        }
+        try {
+          await scheduleWithRetry(ctx, "crawlForms", internal.pokemonData.crawlForms, {}, 5, 200);
+        } catch (e) {
+          console.error("schedule crawlForms error:", e);
+        }
+      }
 
       // New: backfill formTags from forms so "regional" and "gender" filters have data
       try {
