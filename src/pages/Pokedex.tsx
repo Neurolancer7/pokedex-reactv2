@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlternateForms } from "@/components/AlternateForms";
 
+import type { Pokemon } from "@/lib/pokemon-api";
+
 class ErrorBoundary extends React.Component<{ onRetry: () => void; children: React.ReactNode }, { hasError: boolean; errorMessage?: string }> {
   constructor(props: { onRetry: () => void; children: React.ReactNode }) {
     super(props);
@@ -119,6 +121,156 @@ export default function Pokedex() {
 
   const computedLimit = INITIAL_LIMIT;
   const computedOffset = 0; // Always start at 0 since we load all
+
+  // Alternate-forms mode local state
+  const [altList, setAltList] = useState<Pokemon[]>([]);
+  const [altHasMore, setAltHasMore] = useState(false);
+  const altQueueRef = useRef<string[] | null>(null);
+  const [altLoading, setAltLoading] = useState(false);
+
+  // Small helpers (scoped here to avoid leaking across app)
+  async function delay(ms: number) {
+    return new Promise((res) => setTimeout(res, ms));
+  }
+  async function fetchJsonWithRetry<T>(url: string, attempts = 3, baseDelayMs = 250): Promise<T> {
+    let lastErr: unknown;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const ctrl = new AbortController();
+        const id = setTimeout(() => ctrl.abort(), 15000);
+        const res = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(id);
+        if (!res.ok) {
+          if ((res.status >= 500 || res.status === 429) && i < attempts - 1) {
+            await delay(baseDelayMs * Math.pow(2, i));
+            continue;
+          }
+          throw new Error(`HTTP ${res.status} for ${url}`);
+        }
+        return (await res.json()) as T;
+      } catch (err) {
+        lastErr = err;
+        if (i < attempts - 1) {
+          await delay(baseDelayMs * Math.pow(2, i));
+          continue;
+        }
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error("Failed to fetch");
+  }
+
+  // Species buckets to derive alternate forms from (varieties -> pokemon entries)
+  const ALT_SPECIES: string[] = [
+    "tauros","pichu","unown","castform","kyogre","groudon","deoxys","burmy","wormadam",
+    "cherrim","shellos","gastrodon","rotom","dialga","palkia","giratina","shaymin","arceus",
+    "basculin","basculegion","darmanitan","deerling","sawsbuck","tornadus","thundurus","landorus","enamorus",
+    "kyurem","keldeo","meloetta","genesect","greninja","vivillon","flabebe","floette","florges","furfrou",
+    "meowstic","aegislash","pumpkaboo","gourgeist","xerneas","zygarde","hoopa","oricorio","lycanroc",
+    "wishiwashi","silvally","minior","mimikyu","necrozma","magearna","cramorant","toxtricity",
+    "sinistea","polteageist","alcremie","eiscue","indeedee","morpeko","zacian","zamazenta","eternatus",
+    "urshifu","zarude","calyrex","ursaluna","oinkologne","maushold","squawkabilly","palafin","tatsugiri",
+    "dudunsparce","gimmighoul","poltchageist","sinistcha","ogerpon","terapagos"
+  ];
+
+  // Build Pokemon from a pokemon/{name} entry (types, sprites, id, stats)
+  const buildPokemonFromEntry = (p: any): Pokemon => ({
+    pokemonId: Number(p?.id ?? 0),
+    name: String(p?.name ?? ""),
+    height: Number(p?.height ?? 0),
+    weight: Number(p?.weight ?? 0),
+    baseExperience: typeof p?.base_experience === "number" ? p.base_experience : undefined,
+    types: Array.isArray(p?.types) ? p.types.map((t: any) => String(t?.type?.name ?? "")) : [],
+    abilities: Array.isArray(p?.abilities) ? p.abilities.map((a: any) => String(a?.ability?.name ?? "")) : [],
+    stats: Array.isArray(p?.stats)
+      ? p.stats.map((s: any) => ({ name: String(s?.stat?.name ?? ""), value: Number(s?.base_stat ?? 0) }))
+      : [],
+    sprites: {
+      frontDefault: p?.sprites?.front_default ?? undefined,
+      frontShiny: p?.sprites?.front_shiny ?? undefined,
+      officialArtwork: p?.sprites?.other?.["official-artwork"]?.front_default ?? undefined,
+    },
+    moves: Array.isArray(p?.moves) ? p.moves.map((m: any) => String(m?.move?.name ?? "")) : [],
+    generation: 0,
+    species: undefined,
+  });
+
+  // Fetch next batch of species -> varieties -> pokemon details; append to altList
+  const fetchNextAltBatch = async (speciesCount = 4) => {
+    if (!altQueueRef.current || altQueueRef.current.length === 0) {
+      setAltHasMore(false);
+      return;
+    }
+    if (altLoading) return;
+
+    setAltLoading(true);
+    try {
+      const batch = altQueueRef.current.splice(0, speciesCount);
+      const results: Pokemon[] = [];
+
+      for (const speciesName of batch) {
+        // species -> varieties
+        const speciesData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${speciesName}`);
+        const varieties: Array<{ pokemon: { name: string; url: string } }> =
+          Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
+
+        // For each variety, fetch the concrete pokemon data
+        for (const v of varieties) {
+          const pokeName = v?.pokemon?.name;
+          if (!pokeName) continue;
+
+          // gentle pacing
+          await delay(60);
+          try {
+            const p = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${pokeName}`);
+            results.push(buildPokemonFromEntry(p));
+          } catch {
+            // skip broken entries quietly
+          }
+        }
+      }
+
+      // Dedup by pokemonId and sort by id
+      setAltList((prev) => {
+        const map: Record<number, Pokemon> = Object.create(null);
+        for (const p of prev) map[p.pokemonId] = p;
+        for (const p of results) map[p.pokemonId] = p;
+        const merged = Object.values(map).sort((a, b) => a.pokemonId - b.pokemonId);
+        return merged;
+      });
+
+      setAltHasMore(Boolean(altQueueRef.current && altQueueRef.current.length > 0));
+    } finally {
+      setAltLoading(false);
+    }
+  };
+
+  // When switching into Alternate Forms filter, reset local queue and list, and auto-load first batch
+  useEffect(() => {
+    if (selectedFormCategory === "alternate") {
+      // clear default list & pagination context so only alt data shows
+      setItems([]);
+      setOffset(0);
+      setHasMore(false);
+      setIsLoadingMore(false);
+
+      // seed queue and list
+      altQueueRef.current = [...ALT_SPECIES];
+      setAltList([]);
+      setAltHasMore(altQueueRef.current.length > 0);
+
+      // prime first batch
+      fetchNextAltBatch(5).catch(() => {
+        toast.error("Failed to load alternate forms. Try again.");
+      });
+    } else {
+      // leaving alternate mode
+      altQueueRef.current = null;
+      setAltList([]);
+      setAltHasMore(false);
+      setAltLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFormCategory]);
 
   const pokemonData = useConvexQuery(api.pokemon.list, {
     limit: showFavorites ? 0 : BATCH_LIMIT,
@@ -344,9 +496,15 @@ export default function Pokedex() {
     setIsLoadingMore(false);
   }, [pokemonData, offset, showFavorites]);
 
-  const displayPokemon = showFavorites ? (favorites || []) : items;
+  const displayPokemon = selectedFormCategory === "alternate"
+    ? altList
+    : (showFavorites ? (favorites || []) : items);
+
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
-  const isInitialLoading = !showFavorites && pokemonData === undefined && items.length === 0;
+  const isInitialLoading =
+    selectedFormCategory === "alternate"
+      ? altList.length === 0 && (altLoading || isLoadingMore)
+      : (!showFavorites && pokemonData === undefined && items.length === 0);
 
   const totalItems = showFavorites ? (favorites?.length ?? 0) : (pokemonData?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalItems / INITIAL_LIMIT));
@@ -481,22 +639,24 @@ export default function Pokedex() {
 
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
             <PokemonGrid
-              key={`${showFavorites ? "fav" : "infinite"}-${selectedGeneration ?? "all"}-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
-              pokemon={displayPokemon}
+              key={`${
+                selectedFormCategory === "alternate" ? "alt" : (showFavorites ? "fav" : "infinite")
+              }-${selectedGeneration ?? "all"}-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
+              pokemon={displayPokemon as unknown as Pokemon[]}
               favorites={favoriteIds}
               onFavoriteToggle={handleFavoriteToggle}
               isLoading={isInitialLoading}
             />
           </motion.div>
 
-          {!showFavorites && (
+          {selectedFormCategory === "alternate" ? (
             <div className="mt-8 flex flex-col items-center gap-3">
-              {!hasMore && items.length > 0 && (
+              {!altHasMore && altList.length > 0 && (
                 <div className="text-muted-foreground text-sm">No more Pokémon</div>
               )}
-              {hasMore && (
+              {altHasMore && (
                 <>
-                  {isLoadingMore ? (
+                  {altLoading ? (
                     <div
                       className="w-full sm:w-auto flex items-center justify-center"
                       aria-busy="true"
@@ -518,17 +678,66 @@ export default function Pokedex() {
                       variant="default"
                       className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                       onClick={() => {
-                        if (isLoadingMore) return;
-                        setIsLoadingMore(true);
-                        setOffset((o) => o + BATCH_LIMIT);
+                        if (altLoading) return;
+                        fetchNextAltBatch(5).catch(() => {
+                          toast.error("Failed to load more alternate forms.");
+                        });
                       }}
-                      disabled={isLoadingMore}
-                      aria-busy={isLoadingMore}
+                      disabled={altLoading}
+                      aria-busy={altLoading}
                       aria-live="polite"
                       aria-label="Load more Pokémon"
                     >
                       Load More
                     </Button>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="mt-8 flex flex-col items-center gap-3">
+              {!showFavorites && (
+                <>
+                  {!hasMore && items.length > 0 && (
+                    <div className="text-muted-foreground text-sm">No more Pokémon</div>
+                  )}
+                  {hasMore && (
+                    <>
+                      {isLoadingMore ? (
+                        <div
+                          className="w-full sm:w-auto flex items-center justify-center"
+                          aria-busy="true"
+                          aria-live="polite"
+                        >
+                          <div className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg border border-white/10 flex items-center justify-center">
+                            <div className="h-9 w-9 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md shadow-primary/30 flex items-center justify-center animate-pulse">
+                              <img
+                                src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
+                                alt="Loading Pokéball"
+                                className="h-7 w-7 animate-bounce-spin drop-shadow"
+                              />
+                            </div>
+                            <span className="sr-only">Loading more Pokémon…</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="default"
+                          className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                          onClick={() => {
+                            if (isLoadingMore) return;
+                            setIsLoadingMore(true);
+                            setOffset((o) => o + BATCH_LIMIT);
+                          }}
+                          disabled={isLoadingMore}
+                          aria-busy={isLoadingMore}
+                          aria-live="polite"
+                          aria-label="Load more Pokémon"
+                        >
+                          Load More
+                        </Button>
+                      )}
+                    </>
                   )}
                 </>
               )}
