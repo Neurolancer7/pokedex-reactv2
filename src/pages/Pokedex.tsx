@@ -938,8 +938,18 @@ export default function Pokedex() {
             : (selectedFormCategory === "regional"
                 ? [...regionalFlatList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, regionalVisibleCount)
                 : (() => {
+                    // Default: list or favorites, enforce generation range if selected
                     const base = showFavorites ? (favorites || []) : items;
-                    return [...base].sort((a, b) => a.pokemonId - b.pokemonId);
+                    let arr = [...base];
+
+                    if (selectedGeneration) {
+                      const range = GEN_RANGES[selectedGeneration];
+                      if (range) {
+                        arr = arr.filter((p) => p.pokemonId >= range.start && p.pokemonId <= range.end);
+                      }
+                    }
+
+                    return arr.sort((a, b) => a.pokemonId - b.pokemonId);
                   })()
               )
           )
