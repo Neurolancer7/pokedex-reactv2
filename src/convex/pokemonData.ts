@@ -61,6 +61,40 @@ async function fetchJson(
   throw lastErr instanceof Error ? lastErr : new Error(`[${label}] Unknown error`);
 }
 
+// Add: resilient scheduler helper with exponential backoff for transient commit saturation
+async function scheduleWithRetry(
+  ctx: any,
+  label: string,
+  funcRef: any,
+  args: any,
+  attempts = 5,
+  baseDelayMs = 200
+) {
+  let lastErr: unknown = undefined;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await ctx.scheduler.runAfter(0, funcRef, args);
+    } catch (e) {
+      lastErr = e;
+      const msg = e instanceof Error ? e.message : String(e);
+      const code = (e as any)?.code ?? (typeof (e as any) === "object" ? (e as any)?.data?.code : undefined);
+      const isCommitterFull =
+        code === "CommitterFullError" ||
+        msg.includes("CommitterFullError") ||
+        msg.includes("Too many concurrent commits");
+
+      if (isCommitterFull && i < attempts - 1) {
+        // jittered exponential backoff
+        const delayMs = baseDelayMs * Math.pow(2, i) + Math.floor(Math.random() * 100);
+        await delay(delayMs);
+        continue;
+      }
+      throw new Error(`[${label}] ${msg}`);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(`[${label}] Unknown scheduling error`);
+}
+
 // Add: Internal action to process a chunk of Pokémon IDs in the background
 export const processChunk = internalAction({
   args: {
@@ -217,7 +251,8 @@ export const crawlFormsProcessPage = internalAction({
       const data = await fetchJson(listUrl, "PokéAPI pokemon-form list");
       const items: Array<{ name: string; url: string }> = Array.isArray(data?.results) ? data.results : [];
 
-      const CONCURRENCY = 4;
+      // Reduced concurrency to ease commit pressure
+      const CONCURRENCY = 3;
       for (let i = 0; i < items.length; i += CONCURRENCY) {
         const batch = items.slice(i, i + CONCURRENCY);
         await Promise.all(
@@ -265,6 +300,12 @@ export const crawlFormsProcessPage = internalAction({
             }
           }),
         );
+        // small pacing between batches
+        try {
+          await delay(30);
+        } catch {
+          // ignore
+        }
       }
     } catch (e) {
       console.error("crawlFormsProcessPage error:", e);
@@ -312,19 +353,19 @@ export const fetchAndCachePokemon = action({
     try {
       const ids: number[] = Array.from({ length: limit }, (_, i) => offset + i + 1).filter((id) => id <= 1025);
       if (ids.length === 0) {
-        // Still schedule forms + types to keep cache healthy
-        await ctx.scheduler.runAfter(0, internal.pokemonData.processTypes, {});
-        await ctx.scheduler.runAfter(0, internal.pokemonData.crawlForms, {});
+        // Schedule best-effort background tasks with retry
+        await scheduleWithRetry(ctx, "processTypes", internal.pokemonData.processTypes, {}, 5, 200);
+        await scheduleWithRetry(ctx, "crawlForms", internal.pokemonData.crawlForms, {}, 5, 200);
         return { success: true, scheduled: 0, cached: 0 };
       }
 
-      // Schedule types caching & full processing in the background to avoid client timeouts
-      await ctx.scheduler.runAfter(0, internal.pokemonData.processTypes, {});
-      await ctx.scheduler.runAfter(0, internal.pokemonData.processAll, { ids });
-      // New: schedule a full forms crawl in the background
-      await ctx.scheduler.runAfter(0, internal.pokemonData.crawlForms, {});
+      // Schedule in sequence with retry and gentle pacing to reduce burst load
+      await scheduleWithRetry(ctx, "processTypes", internal.pokemonData.processTypes, {}, 5, 200);
+      await delay(50);
+      await scheduleWithRetry(ctx, "processAll", internal.pokemonData.processAll, { ids }, 5, 200);
+      await delay(50);
+      await scheduleWithRetry(ctx, "crawlForms", internal.pokemonData.crawlForms, {}, 5, 200);
 
-      // Return immediately; background jobs will complete shortly
       return { success: true, scheduled: ids.length, cached: ids.length };
     } catch (error) {
       console.error("Error scheduling Pokemon data fetch:", error);
