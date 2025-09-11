@@ -17,6 +17,10 @@ export function GenderDiffGrid({ species }: Props) {
   const names = useMemo(() => (species && species.length > 0 ? species : genderDiffSpecies), [species]);
   const { data, isLoading, error, refetch } = useGenderDiffPokemon(names);
 
+  const sorted = useMemo(() => {
+    return Array.isArray(data) ? [...data].sort((a, b) => a.dexId - b.dexId) : data;
+  }, [data]);
+
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<{ name: string; dexId: number } | null>(null);
   const [gender, setGender] = useState<"male" | "female">("male");
@@ -38,7 +42,7 @@ export function GenderDiffGrid({ species }: Props) {
   useEffect(() => {
     const THRESHOLD_PX = 400;
     const onScroll = () => {
-      if (!Array.isArray(data) || data.length === 0) return;
+      if (!Array.isArray(sorted) || sorted.length === 0) return;
       if (!infiniteEnabled) return;
 
       const scrollY = window.scrollY || window.pageYOffset;
@@ -54,8 +58,8 @@ export function GenderDiffGrid({ species }: Props) {
       const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
       if (!nearBottom) return;
 
-      if (visibleCount < data.length) {
-        setVisibleCount((c) => Math.min(c + 30, data.length));
+      if (visibleCount < sorted.length) {
+        setVisibleCount((c) => Math.min(c + 30, sorted.length));
       }
     };
 
@@ -63,7 +67,7 @@ export function GenderDiffGrid({ species }: Props) {
     return () => {
       window.removeEventListener("scroll", onScroll);
     };
-  }, [data, infiniteEnabled, visibleCount]);
+  }, [sorted, infiniteEnabled, visibleCount]);
 
   const bulbapediaUrl = (name: string) => {
     const anchor = name.replace(/-/g, "_"); // closer to Bulbapedia's section ids
@@ -180,10 +184,10 @@ export function GenderDiffGrid({ species }: Props) {
       )}
 
       {/* Grid */}
-      {Array.isArray(data) && data.length > 0 && (
+      {Array.isArray(sorted) && sorted.length > 0 && (
         <>
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {data.slice(0, visibleCount).map((p) => (
+            {sorted.slice(0, visibleCount).map((p) => (
               <Card
                 key={`${p.dexId}-${p.name}`}
                 className="overflow-hidden border-2 hover:border-primary/50 transition-colors cursor-pointer"
@@ -249,15 +253,15 @@ export function GenderDiffGrid({ species }: Props) {
 
           {/* Pagination controls */}
           <div className="mt-8 flex flex-col items-center gap-3">
-            {visibleCount >= data.length && data.length > 0 && (
+            {visibleCount >= sorted.length && sorted.length > 0 && (
               <div className="text-muted-foreground text-sm">No more Pokémon</div>
             )}
-            {visibleCount < data.length && (
+            {visibleCount < sorted.length && (
               <Button
                 variant="default"
                 className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                 onClick={() => {
-                  setVisibleCount((c) => Math.min(c + 30, data.length));
+                  setVisibleCount((c) => Math.min(c + 30, sorted.length));
                   setInfiniteEnabled(true);
                 }}
                 aria-label="Load more Pokémon"
