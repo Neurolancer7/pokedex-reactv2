@@ -14,6 +14,7 @@ import { PokemonGrid } from "@/components/PokemonGrid";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlternateForms } from "@/components/AlternateForms";
+import { GenderDiffGrid } from "@/components/GenderDiffGrid";
 
 import type { Pokemon } from "@/lib/pokemon-api";
 import { fetchGigantamaxList, type GigantamaxPokemon } from "@/lib/gigantamax";
@@ -952,15 +953,19 @@ export default function Pokedex() {
           )}
 
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
-            <PokemonGrid
-              key={`${
-                selectedFormCategory === "alternate" ? "alt" : (showFavorites ? "fav" : "infinite")
-              }-${selectedGeneration ?? "all"}-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
-              pokemon={displayPokemon as unknown as Pokemon[]}
-              favorites={favoriteIds}
-              onFavoriteToggle={handleFavoriteToggle}
-              isLoading={isInitialLoading}
-            />
+            {selectedFormCategory === "gender-diff" ? (
+              <GenderDiffGrid />
+            ) : (
+              <PokemonGrid
+                key={`${
+                  selectedFormCategory === "alternate" ? "alt" : (showFavorites ? "fav" : "infinite")
+                }-${selectedGeneration ?? "all"}-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
+                pokemon={displayPokemon as unknown as Pokemon[]}
+                favorites={favoriteIds}
+                onFavoriteToggle={handleFavoriteToggle}
+                isLoading={isInitialLoading}
+              />
+            )}
           </motion.div>
 
           {selectedFormCategory === "alternate" ? (
