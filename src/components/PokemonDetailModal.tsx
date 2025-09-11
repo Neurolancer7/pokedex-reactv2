@@ -180,6 +180,53 @@ export function PokemonDetailModal({
   const spriteShiny = data?.sprites?.frontShiny || undefined;
   const currentSprite = showShiny && spriteShiny ? spriteShiny : spriteDefault;
 
+  const isGmax = (() => {
+    const n = String(data?.name ?? "").toLowerCase();
+    return n.includes("gmax") || n.includes("gigantamax");
+  })();
+
+  const gmaxMove: string | undefined = (() => {
+    if (!isGmax) return undefined;
+    const lower = String(data?.name ?? "").toLowerCase();
+    let base = lower;
+    if (lower.endsWith("-gmax")) base = lower.slice(0, -5);
+    else if (lower.endsWith("-gigantamax")) base = lower.slice(0, -"gigantamax".length - 1);
+    const MOVES: Record<string, string> = {
+      venusaur: "G-Max Vine Lash",
+      charizard: "G-Max Wildfire",
+      blastoise: "G-Max Cannonade",
+      butterfree: "G-Max Befuddle",
+      pikachu: "G-Max Volt Crash",
+      meowth: "G-Max Gold Rush",
+      machamp: "G-Max Chi Strike",
+      gengar: "G-Max Terror",
+      kingler: "G-Max Foam Burst",
+      lapras: "G-Max Resonance",
+      eevee: "G-Max Cuddle",
+      snorlax: "G-Max Replenish",
+      garbodor: "G-Max Malodor",
+      melmetal: "G-Max Meltdown",
+      rillaboom: "G-Max Drum Solo",
+      cinderace: "G-Max Fireball",
+      inteleon: "G-Max Hydrosnipe",
+      corviknight: "G-Max Wind Rage",
+      orbeetle: "G-Max Gravitas",
+      drednaw: "G-Max Stonesurge",
+      coalossal: "G-Max Volcalith",
+      flapple: "G-Max Tartness",
+      appletun: "G-Max Sweetness",
+      sandaconda: "G-Max Sandblast",
+      toxtricity: "G-Max Stun Shock",
+      centiskorch: "G-Max Centiferno",
+      hatterene: "G-Max Smite",
+      grimmsnarl: "G-Max Snooze",
+      alcremie: "G-Max Finale",
+      copperajah: "G-Max Steelsurge",
+      duraludon: "G-Max Depletion",
+    };
+    return MOVES[base];
+  })();
+
   const typesSafe: string[] = Array.isArray(data?.types) ? data!.types : [];
   const statsSafe: Array<{ name: string; baseStat: number; effort: number }> =
     Array.isArray((data as any)?.stats)
@@ -262,20 +309,35 @@ export function PokemonDetailModal({
               <div className="space-y-4">
                 {/* Pokemon Image with Shiny toggle */}
                 <div className="relative">
-                  <div className="w-full aspect-square bg-gradient-to-br from-muted/50 to-muted rounded-lg flex items-center justify-center">
+                  <div
+                    className={`w-full aspect-square rounded-lg flex items-center justify-center
+                      ${isGmax
+                        ? "bg-gradient-to-br from-purple-600/15 via-fuchsia-500/10 to-purple-700/15 ring-2 ring-purple-500/30 shadow-lg shadow-purple-500/20"
+                        : "bg-gradient-to-br from-muted/50 to-muted"}
+                    `}
+                  >
                     {currentSprite ? (
                       <motion.img
-                        initial={{ scale: 0.8, opacity: 0 }}
+                        initial={{ scale: 0.9, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
-                        transition={{ type: "spring", stiffness: 200 }}
+                        transition={{ type: "spring", stiffness: 220, damping: 20 }}
                         src={currentSprite}
                         alt={pokemon.name}
-                        className="w-4/5 h-4/5 object-contain"
+                        className={`w-4/5 h-4/5 object-contain ${isGmax ? "drop-shadow-[0_8px_24px_rgba(168,85,247,0.35)]" : ""}`}
                       />
                     ) : (
                       <div className="text-6xl">❓</div>
                     )}
                   </div>
+
+                  {/* G-MAX badge */}
+                  {isGmax && (
+                    <div className="absolute -top-2 -left-2">
+                      <span className="rounded-full bg-purple-600/95 text-white border border-purple-400/70 px-2 py-0.5 text-[10px] shadow">
+                        G-MAX
+                      </span>
+                    </div>
+                  )}
 
                   {/* Shiny toggle control (only shown if shiny exists) */}
                   {spriteShiny && (
@@ -309,6 +371,15 @@ export function PokemonDetailModal({
                     </Badge>
                   ))}
                 </div>
+
+                {/* G-Max Move chip under image */}
+                {isGmax && gmaxMove && (
+                  <div className="mt-2 text-center">
+                    <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium bg-purple-500/10 text-foreground border-purple-500/30">
+                      G-MAX Move: <span className="ml-1 font-semibold">{gmaxMove}</span>
+                    </span>
+                  </div>
+                )}
 
                 {/* Physical Stats */}
                 <div className="grid grid-cols-2 gap-4">
@@ -410,6 +481,18 @@ export function PokemonDetailModal({
                 {/* Additional Info */}
                 {(data?.species) && (
                   <div className="grid grid-cols-2 gap-4 text-sm">
+                    {isGmax && (
+                      <div>
+                        <div className="text-muted-foreground">Form</div>
+                        <div className="font-medium">Gigantamax</div>
+                      </div>
+                    )}
+                    {isGmax && gmaxMove && (
+                      <div>
+                        <div className="text-muted-foreground">G-MAX Move</div>
+                        <div className="font-medium">{gmaxMove}</div>
+                      </div>
+                    )}
                     {data.species.genus && (
                       <div>
                         <div className="text-muted-foreground">Species</div>
