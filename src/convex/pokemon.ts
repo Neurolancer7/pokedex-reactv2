@@ -212,6 +212,40 @@ export const list = query({
             const lowerTags = tags.map((t) => t.toLowerCase());
             return lowerTags.some((t) => wanted.has(t)) || specificIds.has(pokemon.pokemonId);
           });
+
+          // NEW: If Gigantamax filter is active, swap sprites to the Gigantamax form sprites (game forms only).
+          if (wanted.has("gigantamax") && results.length > 0) {
+            // Prefer entries explicitly flagged as Gigantamax and battle-only from the forms cache.
+            const gmaxBySpecies: Map<number, { frontDefault?: string; officialArtwork?: string; frontShiny?: string }> = new Map();
+            for (const r of formRows) {
+              if (r?.isGigantamax === true) {
+                // Only game forms: PokeAPI forms marked for games (pokemon-form endpoint) already represent in-game forms.
+                // Use form sprites; official artwork for Gmax often not available, so rely on frontDefault.
+                const fd = r?.sprites?.frontDefault;
+                const oa = r?.sprites?.officialArtwork;
+                const fs = r?.sprites?.frontShiny;
+                if (!gmaxBySpecies.has(r.pokemonId) && (fd || oa)) {
+                  gmaxBySpecies.set(r.pokemonId, {
+                    frontDefault: fd,
+                    officialArtwork: oa || fd,
+                    frontShiny: fs,
+                  });
+                }
+              }
+            }
+
+            // Override sprites for matched results so UI shows Gigantamax appearance.
+            for (const p of results) {
+              const g = gmaxBySpecies.get(p.pokemonId);
+              if (g) {
+                p.sprites = {
+                  frontDefault: g.frontDefault ?? p.sprites?.frontDefault,
+                  frontShiny: g.frontShiny ?? p.sprites?.frontShiny,
+                  officialArtwork: g.officialArtwork ?? g.frontDefault ?? p.sprites?.officialArtwork,
+                };
+              }
+            }
+          }
         }
       }
 
