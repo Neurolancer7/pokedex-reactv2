@@ -200,6 +200,23 @@ export function PokemonSearch({
           </div>
         )}
 
+        {/* Gender Change filter badge (same image/style as requested) */}
+        {selectedFormCategory === "gender-change" && (
+          <div className="shrink-0">
+            <span
+              title="Gender Change"
+              aria-label="Gender Change"
+              className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-pink-500/40"
+            >
+              <img
+                src="https://harmless-tapir-303.convex.cloud/api/storage/d3256155-fdbb-486b-b117-e4850f259ab5"
+                alt="Gender Change"
+                className="h-6 w-6 object-contain drop-shadow"
+              />
+            </span>
+          </div>
+        )}
+
         {/* Clear Filters */}
         {hasActiveFilters && (
           <Button
