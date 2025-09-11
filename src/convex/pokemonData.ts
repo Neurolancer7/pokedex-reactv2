@@ -20,6 +20,12 @@ async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = 150
   }
 }
 
+function withCode(code: string, msg: string) {
+  const e = new Error(`${code}:${msg}`);
+  (e as any).code = code;
+  return e;
+}
+
 async function fetchJson(
   url: string,
   label: string,
@@ -39,12 +45,12 @@ async function fetchJson(
           await delay(400 * (attempt + 1));
           continue;
         }
-        throw new Error(`[${label}] HTTP ${status} ${text}`);
+        throw withCode("E_EXTERNAL", `[${label}] HTTP ${status} ${text}`);
       }
       try {
         return await res.json();
       } catch {
-        throw new Error(`[${label}] Invalid JSON response`);
+        throw withCode("E_EXTERNAL", `[${label}] Invalid JSON response`);
       }
     } catch (e) {
       lastErr = e;
@@ -54,11 +60,11 @@ async function fetchJson(
         continue;
       }
       const msg = e instanceof Error ? e.message : String(e);
-      throw new Error(`[${label}] ${msg}`);
+      throw withCode("E_EXTERNAL", `[${label}] ${msg}`);
     }
   }
   // Fallback (should not reach)
-  throw lastErr instanceof Error ? lastErr : new Error(`[${label}] Unknown error`);
+  throw lastErr instanceof Error ? lastErr : withCode("E_EXTERNAL", `[${label}] Unknown error`);
 }
 
 // Add: resilient scheduler helper with exponential backoff for transient commit saturation
@@ -67,7 +73,7 @@ async function scheduleWithRetry(
   label: string,
   funcRef: any,
   args: any,
-  attempts = 5,
+  attempts = 7,
   baseDelayMs = 200
 ) {
   let lastErr: unknown = undefined;
@@ -77,22 +83,38 @@ async function scheduleWithRetry(
     } catch (e) {
       lastErr = e;
       const msg = e instanceof Error ? e.message : String(e);
-      const code = (e as any)?.code ?? (typeof (e as any) === "object" ? (e as any)?.data?.code : undefined);
+      const code =
+        (e as any)?.code ??
+        (typeof (e as any) === "object" ? (e as any)?.data?.code : undefined);
+
       const isCommitterFull =
         code === "CommitterFullError" ||
         msg.includes("CommitterFullError") ||
         msg.includes("Too many concurrent commits");
 
-      if (isCommitterFull && i < attempts - 1) {
-        // jittered exponential backoff
-        const delayMs = baseDelayMs * Math.pow(2, i) + Math.floor(Math.random() * 100);
+      const isOCC =
+        code === "OptimisticConcurrencyControlFailure" ||
+        msg.includes("OptimisticConcurrencyControlFailure");
+
+      const isTransientScheduleIssue =
+        msg.includes("Transient error while running schedule") ||
+        msg.toLowerCase().includes("transient") ||
+        msg.toLowerCase().includes("schedule");
+
+      const shouldRetry = isCommitterFull || isOCC || isTransientScheduleIssue;
+
+      if (shouldRetry && i < attempts - 1) {
+        const delayMs = baseDelayMs * Math.pow(2, i) + Math.floor(Math.random() * 120);
         await delay(delayMs);
         continue;
       }
-      throw new Error(`[${label}] ${msg}`);
+
+      throw withCode("E_SCHEDULE", `[${label}] ${msg}`);
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error(`[${label}] Unknown scheduling error`);
+  throw lastErr instanceof Error
+    ? lastErr
+    : withCode("E_SCHEDULE", `[${label}] Unknown scheduling error`);
 }
 
 // Add: Internal action to process a chunk of Pokémon IDs in the background
@@ -370,7 +392,7 @@ export const fetchAndCachePokemon = action({
     } catch (error) {
       console.error("Error scheduling Pokemon data fetch:", error);
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to schedule Pokemon data fetch: ${message}`);
+      throw withCode("E_SCHEDULE", `Failed to schedule Pokemon data fetch: ${message}`);
     }
   },
 });
@@ -409,6 +431,6 @@ async function cacheTypes(ctx: any) {
     const message =
       err instanceof Error ? err.message : "Unknown error in cacheTypes";
     console.error("cacheTypes error:", err);
-    throw new Error(message);
+    throw withCode("E_EXTERNAL", message);
   }
 }

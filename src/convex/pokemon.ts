@@ -11,6 +11,29 @@ const REGIONAL_SPECIES: ReadonlySet<number> = new Set<number>([
   705, 706, 713, 724,
 ]);
 
+// Add generation ID ranges as a fallback when generation-indexed lookup returns no rows
+const GEN_RANGES: Record<number, { start: number; end: number }> = {
+  1: { start: 1, end: 151 },
+  2: { start: 152, end: 251 },
+  3: { start: 252, end: 386 },
+  4: { start: 387, end: 493 },
+  5: { start: 494, end: 649 },
+  6: { start: 650, end: 721 },
+  7: { start: 722, end: 809 },
+  8: { start: 810, end: 905 },
+  9: { start: 906, end: 1025 },
+};
+
+const ERROR_CODE_REGEX = /^[A-Z_]+:/;
+function apiError(
+  code: "E_INVALID_ARG" | "E_NOT_AUTH" | "E_NOT_FOUND" | "E_CONFLICT" | "E_INTERNAL",
+  message: string,
+) {
+  const err = new Error(`${code}:${message}`);
+  (err as any).code = code;
+  return err;
+}
+
 // Get paginated list of Pokemon with validation and error handling
 export const list = query({
   args: {
@@ -28,10 +51,10 @@ export const list = query({
       const limit = args.limit ?? 20;
       const offset = args.offset ?? 0;
       if (!Number.isFinite(limit) || limit < 0 || limit > 1025) {
-        throw new Error("Invalid 'limit' provided. It must be between 0 and 1025.");
+        throw apiError("E_INVALID_ARG", "Invalid 'limit' provided. It must be between 0 and 1025.");
       }
       if (!Number.isFinite(offset) || offset < 0) {
-        throw new Error("Invalid 'offset' provided. It must be a non-negative number.");
+        throw apiError("E_INVALID_ARG", "Invalid 'offset' provided. It must be a non-negative number.");
       }
 
       // Normalize filters
@@ -46,7 +69,7 @@ export const list = query({
       const hasValidGeneration = hasValidNumber && inAllowedRange;
 
       if (hasValidNumber && !inAllowedRange) {
-        throw new Error("Invalid 'generation' provided. It must be between 1 and 9.");
+        throw apiError("E_INVALID_ARG", "Invalid 'generation' provided. It must be between 1 and 9.");
       }
 
       let results: any[] = [];
@@ -200,8 +223,9 @@ export const list = query({
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unknown error in pokemon.list";
+      const coded = ERROR_CODE_REGEX.test(message) ? message : `E_INTERNAL:${message}`;
       console.error("pokemon.list error:", err);
-      throw new Error(message);
+      throw new Error(coded);
     }
   },
 });
@@ -212,7 +236,7 @@ export const getById = query({
   handler: async (ctx, args) => {
     try {
       if (!Number.isFinite(args.pokemonId) || args.pokemonId <= 0) {
-        throw new Error("Invalid 'pokemonId'. It must be a positive number.");
+        throw apiError("E_INVALID_ARG", "Invalid 'pokemonId'. It must be a positive number.");
       }
 
       const pokemonResults = await ctx.db
@@ -236,8 +260,9 @@ export const getById = query({
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unknown error in pokemon.getById";
+      const coded = ERROR_CODE_REGEX.test(message) ? message : `E_INTERNAL:${message}`;
       console.error("pokemon.getById error:", err);
-      throw new Error(message);
+      throw new Error(coded);
     }
   },
 });
@@ -251,8 +276,9 @@ export const getTypes = query({
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unknown error in pokemon.getTypes";
+      const coded = ERROR_CODE_REGEX.test(message) ? message : `E_INTERNAL:${message}`;
       console.error("pokemon.getTypes error:", err);
-      throw new Error(message);
+      throw new Error(coded);
     }
   },
 });
@@ -263,7 +289,7 @@ export const addToFavorites = mutation({
   handler: async (ctx, args) => {
     try {
       if (!Number.isFinite(args.pokemonId) || args.pokemonId <= 0) {
-        throw new Error("Invalid 'pokemonId'. It must be a positive number.");
+        throw apiError("E_INVALID_ARG", "Invalid 'pokemonId'. It must be a positive number.");
       }
 
       // Ensure the Pokémon exists
@@ -273,12 +299,12 @@ export const addToFavorites = mutation({
         .collect();
 
       if (pokemonExists.length === 0) {
-        throw new Error("Pokemon not found");
+        throw apiError("E_NOT_FOUND", "Pokemon not found");
       }
 
       const user = await getCurrentUser(ctx);
       if (!user) {
-        throw new Error("Must be authenticated to add favorites");
+        throw apiError("E_NOT_AUTH", "Must be authenticated to add favorites");
       }
 
       const existing = await ctx.db
@@ -289,7 +315,7 @@ export const addToFavorites = mutation({
         .unique();
 
       if (existing) {
-        throw new Error("Pokemon already in favorites");
+        throw apiError("E_CONFLICT", "Pokemon already in favorites");
       }
 
       return await ctx.db.insert("favorites", {
@@ -301,8 +327,9 @@ export const addToFavorites = mutation({
         err instanceof Error
           ? err.message
           : "Unknown error in pokemon.addToFavorites";
+      const coded = ERROR_CODE_REGEX.test(message) ? message : `E_INTERNAL:${message}`;
       console.error("pokemon.addToFavorites error:", err);
-      throw new Error(message);
+      throw new Error(coded);
     }
   },
 });
@@ -313,12 +340,12 @@ export const removeFromFavorites = mutation({
   handler: async (ctx, args) => {
     try {
       if (!Number.isFinite(args.pokemonId) || args.pokemonId <= 0) {
-        throw new Error("Invalid 'pokemonId'. It must be a positive number.");
+        throw apiError("E_INVALID_ARG", "Invalid 'pokemonId'. It must be a positive number.");
       }
 
       const user = await getCurrentUser(ctx);
       if (!user) {
-        throw new Error("Must be authenticated to remove favorites");
+        throw apiError("E_NOT_AUTH", "Must be authenticated to remove favorites");
       }
 
       const favorite = await ctx.db
@@ -329,7 +356,7 @@ export const removeFromFavorites = mutation({
         .unique();
 
       if (!favorite) {
-        throw new Error("Pokemon not in favorites");
+        throw apiError("E_NOT_FOUND", "Pokemon not in favorites");
       }
 
       return await ctx.db.delete(favorite._id);
@@ -338,8 +365,9 @@ export const removeFromFavorites = mutation({
         err instanceof Error
           ? err.message
           : "Unknown error in pokemon.removeFromFavorites";
+      const coded = ERROR_CODE_REGEX.test(message) ? message : `E_INTERNAL:${message}`;
       console.error("pokemon.removeFromFavorites error:", err);
-      throw new Error(message);
+      throw new Error(coded);
     }
   },
 });
@@ -378,21 +406,9 @@ export const getFavorites = query({
         err instanceof Error
           ? err.message
           : "Unknown error in pokemon.getFavorites";
+      const coded = ERROR_CODE_REGEX.test(message) ? message : `E_INTERNAL:${message}`;
       console.error("pokemon.getFavorites error:", err);
-      throw new Error(message);
+      throw new Error(coded);
     }
   },
 });
-
-// Add generation ID ranges as a fallback when generation-indexed lookup returns no rows
-const GEN_RANGES: Record<number, { start: number; end: number }> = {
-  1: { start: 1, end: 151 },
-  2: { start: 152, end: 251 },
-  3: { start: 252, end: 386 },
-  4: { start: 387, end: 493 },
-  5: { start: 494, end: 649 },
-  6: { start: 650, end: 721 },
-  7: { start: 722, end: 809 },
-  8: { start: 810, end: 905 },
-  9: { start: 906, end: 1025 },
-};
