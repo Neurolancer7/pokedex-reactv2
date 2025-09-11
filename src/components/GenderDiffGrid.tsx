@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { genderDiffSpecies } from "@/lib/genderDiffSpecies";
 import { useGenderDiffPokemon, spriteFromDexId } from "@/lib/useGenderDiffPokemon";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RotateCw } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 type Props = {
   species?: string[];
@@ -14,6 +15,23 @@ type Props = {
 export function GenderDiffGrid({ species }: Props) {
   const names = useMemo(() => (species && species.length > 0 ? species : genderDiffSpecies), [species]);
   const { data, isLoading, error, refetch } = useGenderDiffPokemon(names);
+
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<{ name: string; dexId: number } | null>(null);
+  const [gender, setGender] = useState<"male" | "female">("male");
+  const [imgKey, setImgKey] = useState(0); // forces img reload on toggle
+
+  const bulbapediaUrl = (name: string) => {
+    const anchor = name.replace(/-/g, "_"); // closer to Bulbapedia's section ids
+    return `https://bulbapedia.bulbagarden.net/wiki/List_of_Pok%C3%A9mon_with_gender_differences#${encodeURIComponent(anchor)}`;
+  };
+
+  const genderSpriteUrl = (dexId: number, g: "male" | "female") => {
+    if (g === "female") {
+      return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/female/${dexId}.png`;
+    }
+    return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${dexId}.png`;
+  };
 
   return (
     <div className="w-full">
@@ -33,7 +51,7 @@ export function GenderDiffGrid({ species }: Props) {
         </div>
       )}
 
-      {/* Error state (non-blocking; may still show partial results) */}
+      {/* Error state */}
       {error && (
         <div className="mb-4">
           <Alert>
@@ -57,7 +75,16 @@ export function GenderDiffGrid({ species }: Props) {
       {Array.isArray(data) && data.length > 0 && (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {data.map((p) => (
-            <Card key={`${p.dexId}-${p.name}`} className="overflow-hidden border-2 hover:border-primary/50 transition-colors">
+            <Card
+              key={`${p.dexId}-${p.name}`}
+              className="overflow-hidden border-2 hover:border-primary/50 transition-colors cursor-pointer"
+              onClick={() => {
+                setSelected({ name: p.name, dexId: p.dexId });
+                setGender("male");
+                setImgKey((k) => k + 1);
+                setOpen(true);
+              }}
+            >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-sm font-mono text-muted-foreground">#{String(p.dexId).padStart(4, "0")}</span>
@@ -85,6 +112,7 @@ export function GenderDiffGrid({ species }: Props) {
                       variant="outline"
                       size="sm"
                       className="capitalize"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <a href={f.url} target="_blank" rel="noreferrer">
                         {f.name.replace("-", " ")}
@@ -100,6 +128,91 @@ export function GenderDiffGrid({ species }: Props) {
           ))}
         </div>
       )}
+
+      {/* Simplified Gender Modal */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-xl p-0">
+          <div className="p-6">
+            <DialogHeader className="mb-4">
+              <DialogTitle className="text-xl font-bold capitalize">
+                {selected?.name?.replace("-", " ")}
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Quick view to compare male/female appearances
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* Gender toggle */}
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Button
+                variant={gender === "male" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setGender("male");
+                  setImgKey((k) => k + 1);
+                }}
+                aria-pressed={gender === "male"}
+              >
+                Male
+              </Button>
+              <Button
+                variant={gender === "female" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setGender("female");
+                  setImgKey((k) => k + 1);
+                }}
+                aria-pressed={gender === "female"}
+              >
+                Female
+              </Button>
+            </div>
+
+            {/* Gendered sprite */}
+            <div className="w-full flex items-center justify-center">
+              <div className="w-60 h-60 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted rounded-lg border">
+                {selected && (
+                  <img
+                    key={`${selected.dexId}-${gender}-${imgKey}`}
+                    src={genderSpriteUrl(selected.dexId, gender)}
+                    alt={`${selected.name} ${gender}`}
+                    className="w-52 h-52 object-contain"
+                    onError={(e) => {
+                      // Fallback to male if female sprite missing
+                      const img = e.currentTarget as HTMLImageElement;
+                      if (gender === "female") {
+                        img.src = genderSpriteUrl(selected.dexId, "male");
+                      }
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Differences section with Bulbapedia link */}
+            <div className="mt-5 p-4 bg-muted/30 rounded-lg">
+              <h4 className="font-semibold mb-2">Differences</h4>
+              <p className="text-sm text-muted-foreground">
+                This species exhibits gender-based visual differences. For a detailed description, visit the Bulbapedia entry.
+              </p>
+              {selected && (
+                <div className="mt-3">
+                  <Button asChild size="sm" variant="outline" className="gap-2">
+                    <a
+                      href={bulbapediaUrl(selected.name)}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Open Bulbapedia gender differences description"
+                    >
+                      View details on Bulbapedia
+                    </a>
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
