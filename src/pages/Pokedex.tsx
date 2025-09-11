@@ -163,6 +163,9 @@ export default function Pokedex() {
     throw lastErr instanceof Error ? lastErr : new Error("Failed to fetch");
   }
 
+  // Token to invalidate stale alternate-forms fetches
+  const altTokenRef = useRef(0);
+
   // Species buckets to derive alternate forms from (varieties -> pokemon entries)
   const ALT_SPECIES: string[] = [
     "tauros","pichu","unown","castform","kyogre","groudon","deoxys","burmy","wormadam",
@@ -200,7 +203,11 @@ export default function Pokedex() {
 
   // Fetch next batch of species -> varieties -> pokemon details; append to altList
   // - Returns the new total length after merge
-  const fetchNextAltBatch = async (speciesCount = 16): Promise<number> => {
+  const fetchNextAltBatch = async (speciesCount = 16, token?: number): Promise<number> => {
+    // If another run started, ignore this call
+    if (typeof token === "number" && token !== altTokenRef.current) {
+      return altList.length;
+    }
     if (!altQueueRef.current || altQueueRef.current.length === 0) {
       setAltHasMore(false);
       return altList.length;
@@ -210,6 +217,11 @@ export default function Pokedex() {
     setAltLoading(true);
     try {
       const batch = altQueueRef.current.splice(0, speciesCount);
+
+      // Early exit if token invalidated during queue mutation
+      if (typeof token === "number" && token !== altTokenRef.current) {
+        return altList.length;
+      }
 
       // Process species in parallel to speed up
       const settled = await Promise.allSettled(
@@ -238,6 +250,11 @@ export default function Pokedex() {
         })
       );
 
+      // If invalidated while fetching, stop
+      if (typeof token === "number" && token !== altTokenRef.current) {
+        return altList.length;
+      }
+
       const results: Pokemon[] = [];
       for (const r of settled) {
         if (r.status === "fulfilled" && Array.isArray(r.value)) {
@@ -256,20 +273,32 @@ export default function Pokedex() {
         return merged;
       });
 
-      setAltHasMore(Boolean(altQueueRef.current && altQueueRef.current.length > 0));
+      // Only update hasMore if token still valid
+      if (typeof token !== "number" || token === altTokenRef.current) {
+        setAltHasMore(Boolean(altQueueRef.current && altQueueRef.current.length > 0));
+      }
 
       return newLen;
     } finally {
-      setAltLoading(false);
+      // Only clear loading if token still valid
+      if (typeof token !== "number" || token === altTokenRef.current) {
+        setAltLoading(false);
+      }
     }
   };
 
   // Load until at least `target` total items are present (or queue is exhausted)
-  const loadAltUntil = async (targetTotal: number) => {
+  const loadAltUntil = async (targetTotal: number, token?: number) => {
     try {
       // Use a bigger species batch to speed up filling to the target quickly
-      while ((altList.length < targetTotal) && altQueueRef.current && altQueueRef.current.length > 0) {
-        const newLen = await fetchNextAltBatch(24);
+      while (
+        (typeof token !== "number" || token === altTokenRef.current) &&
+        (altList.length < targetTotal) &&
+        altQueueRef.current &&
+        altQueueRef.current.length > 0
+      ) {
+        const newLen = await fetchNextAltBatch(24, token);
+        if (typeof token === "number" && token !== altTokenRef.current) break;
         if (newLen >= targetTotal) break;
         // small pause to yield UI
         await delay(0);
@@ -355,9 +384,13 @@ export default function Pokedex() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFormCategory]);
 
-  // When switching into Alternate Forms filter, reset local queue and list, and load exactly 30 by default
+  // When switching into Alternate Forms filter, reset local queue and list, and load exactly 30 by default with token
   useEffect(() => {
     if (selectedFormCategory === "alternate") {
+      // Invalidate any previous runs
+      altTokenRef.current += 1;
+      const token = altTokenRef.current;
+
       // clear default list & pagination context so only alt data shows
       setItems([]);
       setOffset(0);
@@ -370,9 +403,10 @@ export default function Pokedex() {
       setAltHasMore(altQueueRef.current.length > 0);
 
       // Load exactly 30 by default (or as close as possible)
-      loadAltUntil(30);
+      loadAltUntil(30, token);
     } else {
-      // leaving alternate mode
+      // leaving alternate mode: invalidate and clean up
+      altTokenRef.current += 1;
       altQueueRef.current = null;
       setAltList([]);
       setAltHasMore(false);
@@ -867,10 +901,14 @@ export default function Pokedex() {
                       onClick={async () => {
                         if (altLoading) return;
                         const current = altList.length;
+                        const token = altTokenRef.current;
                         // Load 30 more entries
-                        await loadAltUntil(current + 30);
+                        await loadAltUntil(current + 30, token);
                         if (!altQueueRef.current || altQueueRef.current.length === 0) {
-                          setAltHasMore(false);
+                          // Only update hasMore if still valid
+                          if (token === altTokenRef.current) {
+                            setAltHasMore(false);
+                          }
                         }
                       }}
                       disabled={altLoading}
