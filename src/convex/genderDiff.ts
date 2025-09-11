@@ -5,11 +5,12 @@ import { v } from "convex/values";
 export const getByPokemonId = internalQuery({
   args: { pokemonId: v.number() },
   handler: async (ctx, args) => {
-    const doc = await ctx.db
+    // Replace unique() with safe lookup to avoid duplicate-row crashes
+    const rows = await ctx.db
       .query("genderDifferences")
       .withIndex("by_pokemon_id", (q) => q.eq("pokemonId", args.pokemonId))
-      .unique();
-    return doc ?? null;
+      .collect();
+    return rows[0] ?? null;
   },
 });
 
@@ -17,11 +18,12 @@ export const getByPokemonId = internalQuery({
 export const getByName = internalQuery({
   args: { name: v.string() },
   handler: async (ctx, args) => {
-    const doc = await ctx.db
+    // Replace unique() with safe lookup to avoid duplicate-row crashes
+    const rows = await ctx.db
       .query("genderDifferences")
       .withIndex("by_name", (q) => q.eq("name", args.name.toLowerCase()))
-      .unique();
-    return doc ?? null;
+      .collect();
+    return rows[0] ?? null;
   },
 });
 
@@ -35,10 +37,13 @@ export const upsert = internalMutation({
     sourceUrl: v.string(),
   },
   handler: async (ctx, args) => {
-    const existing = await ctx.db
+    // Avoid unique() to handle rare duplicate data gracefully; patch the first match
+    const existingRows = await ctx.db
       .query("genderDifferences")
       .withIndex("by_pokemon_id", (q) => q.eq("pokemonId", args.pokemonId))
-      .unique();
+      .collect();
+
+    const existing = existingRows[0];
     if (existing) {
       await ctx.db.patch(existing._id, {
         description: args.description,
@@ -48,6 +53,7 @@ export const upsert = internalMutation({
       });
       return existing._id;
     }
+
     return await ctx.db.insert("genderDifferences", {
       pokemonId: args.pokemonId,
       name: args.name.toLowerCase(),
