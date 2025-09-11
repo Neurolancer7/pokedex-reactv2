@@ -189,12 +189,12 @@ export function PokemonSearch({
             <span
               title="Gender Differences"
               aria-label="Gender Differences"
-              className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1 ring-2 ring-blue-500/40"
+              className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-pink-500/40"
             >
               <img
                 src="https://harmless-tapir-303.convex.cloud/api/storage/d3256155-fdbb-486b-b117-e4850f259ab5"
                 alt="Gender Differences"
-                className="h-8 w-8 object-contain drop-shadow"
+                className="h-6 w-6 object-contain drop-shadow"
               />
             </span>
           </div>
