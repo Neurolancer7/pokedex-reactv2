@@ -505,6 +505,14 @@ export const fetchAndCachePokemon = action({
         // Also ensure Gmax forms in background
         await scheduleWithRetry(ctx, "processGigantamaxForms", internal.pokemonData.processGigantamaxForms, {}, 5, 200);
         await scheduleWithRetry(ctx, "crawlForms", internal.pokemonData.crawlForms, {}, 5, 200);
+
+        // New: backfill formTags from forms so filters like "regional"/"gender" work
+        try {
+          await ctx.runMutation(internal.pokemonInternal.backfillFormTagsFromForms, {});
+        } catch (e) {
+          console.error("backfillFormTagsFromForms (empty ids) error:", e);
+        }
+
         return { success: true, scheduled: 0, cached: 0 };
       }
 
@@ -517,6 +525,13 @@ export const fetchAndCachePokemon = action({
       await scheduleWithRetry(ctx, "processGigantamaxForms", internal.pokemonData.processGigantamaxForms, {}, 5, 200);
       await delay(50);
       await scheduleWithRetry(ctx, "crawlForms", internal.pokemonData.crawlForms, {}, 5, 200);
+
+      // New: backfill formTags from forms so "regional" and "gender" filters have data
+      try {
+        await ctx.runMutation(internal.pokemonInternal.backfillFormTagsFromForms, {});
+      } catch (e) {
+        console.error("backfillFormTagsFromForms error:", e);
+      }
 
       return { success: true, scheduled: ids.length, cached: ids.length };
     } catch (error) {

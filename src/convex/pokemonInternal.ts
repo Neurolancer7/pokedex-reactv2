@@ -361,6 +361,48 @@ export const mergeFormTagsIntoPokemon = internalMutation({
   },
 });
 
+export const backfillFormTagsFromForms = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    // Collect all pokemon
+    const allPokemon = await ctx.db.query("pokemon").collect();
+
+    for (const p of allPokemon) {
+      // For each pokemon, collect all forms and merge categories
+      const forms = await ctx.db
+        .query("pokemonForms")
+        .withIndex("by_pokemon_id", (q) => q.eq("pokemonId", (p as any).pokemonId))
+        .collect();
+
+      const categoriesFromForms: string[] = Array.from(
+        new Set(
+          forms
+            .flatMap((f: any) =>
+              Array.isArray(f.categories)
+                ? f.categories.map((c: unknown) => String(c).toLowerCase())
+                : [],
+            ),
+        ),
+      );
+
+      const existing: string[] = Array.isArray((p as any).formTags)
+        ? (p as any).formTags.map((c: unknown) => String(c).toLowerCase())
+        : [];
+
+      const merged = Array.from(new Set([...existing, ...categoriesFromForms]));
+
+      // Only patch if changed
+      const changed =
+        merged.length !== existing.length ||
+        merged.some((v, i) => v !== existing[i]);
+
+      if (changed) {
+        await ctx.db.patch((p as any)._id, { formTags: merged });
+      }
+    }
+  },
+});
+
 function getGenerationFromId(id: number): number {
   if (id <= 151) return 1;
   if (id <= 251) return 2;

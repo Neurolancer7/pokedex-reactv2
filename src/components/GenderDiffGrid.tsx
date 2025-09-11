@@ -41,7 +41,7 @@ export function GenderDiffGrid({ species }: Props) {
     return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${dexId}.png`;
   };
 
-  const fetchGenderDiff = useAction(api.pokemonData.fetchGenderDifference);
+  const fetchGenderDiff = useAction(api.genderDiffActions.fetchGenderDifference);
 
   const checkBulbapedia = async (name: string) => {
     const url = bulbapediaUrl(name);
