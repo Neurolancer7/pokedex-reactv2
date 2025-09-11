@@ -932,12 +932,18 @@ export default function Pokedex() {
   const displayPokemon = selectedFormCategory === "alternate"
     ? [...altList].sort((a, b) => a.pokemonId - b.pokemonId)
     : (selectedFormCategory === "mega"
-        ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, megaVisibleCount)  // show 30 then paginate
+        ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, megaVisibleCount)
         : (selectedFormCategory === "gigantamax"
-            ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, gmaxVisibleCount) // show 30 then paginate
+            ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, gmaxVisibleCount)
             : (selectedFormCategory === "regional"
-                ? regionalFlatList.slice(0, regionalVisibleCount)
-                : (showFavorites ? (favorites || []) : items))));
+                ? [...regionalFlatList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, regionalVisibleCount)
+                : (() => {
+                    const base = showFavorites ? (favorites || []) : items;
+                    return [...base].sort((a, b) => a.pokemonId - b.pokemonId);
+                  })()
+              )
+          )
+      );
 
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
   const isInitialLoading =
