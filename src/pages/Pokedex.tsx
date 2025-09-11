@@ -344,9 +344,6 @@ export default function Pokedex() {
     setIsLoadingMore(false);
   }, [pokemonData, offset, showFavorites]);
 
-  // Compute main content conditionally:
-  const showAlternateForms = selectedFormCategory === "alternate";
-
   const displayPokemon = showFavorites ? (favorites || []) : items;
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
   const isInitialLoading = !showFavorites && pokemonData === undefined && items.length === 0;
@@ -483,20 +480,16 @@ export default function Pokedex() {
           )}
 
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
-            {showAlternateForms ? (
-              <AlternateForms />
-            ) : (
-              <PokemonGrid
-                key={`${showFavorites ? "fav" : "infinite"}-${selectedGeneration ?? "all"}-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
-                pokemon={displayPokemon}
-                favorites={favoriteIds}
-                onFavoriteToggle={handleFavoriteToggle}
-                isLoading={isInitialLoading}
-              />
-            )}
+            <PokemonGrid
+              key={`${showFavorites ? "fav" : "infinite"}-${selectedGeneration ?? "all"}-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
+              pokemon={displayPokemon}
+              favorites={favoriteIds}
+              onFavoriteToggle={handleFavoriteToggle}
+              isLoading={isInitialLoading}
+            />
           </motion.div>
 
-          {!showFavorites && !showAlternateForms && (
+          {!showFavorites && (
             <div className="mt-8 flex flex-col items-center gap-3">
               {!hasMore && items.length > 0 && (
                 <div className="text-muted-foreground text-sm">No more Pokémon</div>

@@ -73,7 +73,7 @@ export function PokemonSearch({
     onFilterChange({
       types: selectedTypes,
       generation: selectedGeneration,
-      formCategory: value === "any" ? "any" : value,
+      formCategory: value === "any" ? undefined : value,
     });
   };
 
