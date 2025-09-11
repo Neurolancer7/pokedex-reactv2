@@ -29,6 +29,49 @@ export function PokemonCard({
     return n.includes("gmax") || n.includes("gigantamax");
   })();
 
+  const gmaxMove = (() => {
+    if (!isGmax) return undefined;
+    const lower = pokemon.name.toLowerCase();
+    let base = lower;
+    if (lower.endsWith("-gmax")) base = lower.slice(0, -5);
+    else if (lower.endsWith("-gigantamax")) base = lower.slice(0, -"gigantamax".length - 1);
+    // Mapping from base species name to the official G-Max move
+    const MOVES: Record<string, string> = {
+      venusaur: "G-Max Vine Lash",
+      charizard: "G-Max Wildfire",
+      blastoise: "G-Max Cannonade",
+      butterfree: "G-Max Befuddle",
+      pikachu: "G-Max Volt Crash",
+      meowth: "G-Max Gold Rush",
+      machamp: "G-Max Chi Strike",
+      gengar: "G-Max Terror",
+      kingler: "G-Max Foam Burst",
+      lapras: "G-Max Resonance",
+      eevee: "G-Max Cuddle",
+      snorlax: "G-Max Replenish",
+      garbodor: "G-Max Malodor",
+      melmetal: "G-Max Meltdown",
+      rillaboom: "G-Max Drum Solo",
+      cinderace: "G-Max Fireball",
+      inteleon: "G-Max Hydrosnipe",
+      corviknight: "G-Max Wind Rage",
+      orbeetle: "G-Max Gravitas",
+      drednaw: "G-Max Stonesurge",
+      coalossal: "G-Max Volcalith",
+      flapple: "G-Max Tartness",
+      appletun: "G-Max Sweetness",
+      sandaconda: "G-Max Sandblast",
+      toxtricity: "G-Max Stun Shock",
+      centiskorch: "G-Max Centiferno",
+      hatterene: "G-Max Smite",
+      grimmsnarl: "G-Max Snooze",
+      alcremie: "G-Max Finale",
+      copperajah: "G-Max Steelsurge",
+      duraludon: "G-Max Depletion",
+    };
+    return MOVES[base];
+  })();
+
   return (
     <motion.div
       whileHover={{ y: -4, scale: 1.02 }}
@@ -106,6 +149,15 @@ export function PokemonCard({
               </Badge>
             ))}
           </div>
+
+          {/* G-Max Move (only for Gigantamax forms) */}
+          {isGmax && gmaxMove && (
+            <div className="mt-3 text-center">
+              <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium bg-accent/30">
+                G-MAX Move: <span className="ml-1 text-foreground">{gmaxMove}</span>
+              </span>
+            </div>
+          )}
 
           {/* Quick Stats */}
           <div className="mt-3 pt-3 border-t border-border/50">
