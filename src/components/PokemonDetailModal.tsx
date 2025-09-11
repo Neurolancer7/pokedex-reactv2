@@ -271,8 +271,7 @@ export function PokemonDetailModal({
                     <img
                       src="https://harmless-tapir-303.convex.cloud/api/storage/c454d9d0-824d-44a7-9f06-da70175922e2"
                       alt="Mega Evolution"
-                      title="Mega Evolution"
-                      className="h-5 w-5 rounded-sm shadow"
+                      className="h-5 w-5"
                     />
                   )}
                 </DialogTitle>
