@@ -271,12 +271,12 @@ export function PokemonDetailModal({
                     <span
                       title="Mega Evolution"
                       aria-label="Mega Evolution"
-                      className="inline-flex items-center justify-center rounded-full bg-white/90 backdrop-blur border shadow p-1 ring-1 ring-fuchsia-500/40"
+                      className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-fuchsia-500/40"
                     >
                       <img
                         src="https://harmless-tapir-303.convex.cloud/api/storage/5bccd8f0-8ff6-48ea-9149-b26759dfe4d5"
                         alt="Mega Evolution"
-                        className="h-5 w-5 object-contain drop-shadow"
+                        className="h-6 w-6 object-contain drop-shadow"
                       />
                     </span>
                   )}
@@ -354,12 +354,12 @@ export function PokemonDetailModal({
                       <span
                         title="Gigantamax"
                         aria-label="Gigantamax"
-                        className="inline-flex items-center justify-center rounded-full bg-white/90 backdrop-blur border shadow p-1 ring-1 ring-pink-500/40"
+                        className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-pink-500/40"
                       >
                         <img
                           src="https://harmless-tapir-303.convex.cloud/api/storage/63c94427-b9f7-4312-b254-b148bf2b227e"
                           alt="Gigantamax"
-                          className="h-5 w-5 object-contain drop-shadow"
+                          className="h-6 w-6 object-contain drop-shadow"
                         />
                       </span>
                     </div>
