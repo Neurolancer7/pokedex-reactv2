@@ -133,7 +133,7 @@ export function PokemonDetailModal({
 
                 {/* Types */}
                 <div className="flex gap-2 justify-center">
-                  {pokemon.types.map((type) => (
+                  {(pokemon.types ?? []).map((type) => (
                     <Badge
                       key={type}
                       variant="secondary"
@@ -183,21 +183,24 @@ export function PokemonDetailModal({
                     Base Stats
                   </h4>
                   <div className="space-y-3">
-                    {pokemon.stats.map((stat) => {
-                      const IconComponent = statIcons[stat.name as keyof typeof statIcons] || Activity;
-                      const percentage = calculateStatPercentage(stat.baseStat);
-                      
+                    {(pokemon.stats ?? []).map((stat) => {
+                      const s: any = stat as any;
+                      const IconComponent = statIcons[(s?.name as keyof typeof statIcons) ?? "hp"] || Activity;
+                      const base = Number(s?.baseStat ?? s?.value ?? 0);
+                      const name = String(s?.name ?? "stat");
+                      const percentage = calculateStatPercentage(base);
+
                       return (
-                        <div key={stat.name} className="space-y-1">
+                        <div key={name} className="space-y-1">
                           <div className="flex justify-between items-center text-sm">
                             <div className="flex items-center gap-2">
                               <IconComponent className="h-3 w-3 text-muted-foreground" />
                               <span className="capitalize font-medium">
-                                {stat.name.replace('-', ' ')}
+                                {name.replace('-', ' ')}
                               </span>
                             </div>
                             <span className="font-mono font-semibold">
-                              {stat.baseStat}
+                              {base}
                             </span>
                           </div>
                           <Progress value={percentage} className="h-2" />
@@ -213,21 +216,27 @@ export function PokemonDetailModal({
                 <div>
                   <h4 className="font-semibold mb-3">Abilities</h4>
                   <div className="space-y-2">
-                    {pokemon.abilities.map((ability, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-2 bg-muted/30 rounded"
-                      >
-                        <span className="capitalize font-medium">
-                          {ability.name.replace('-', ' ')}
-                        </span>
-                        {ability.isHidden && (
-                          <Badge variant="outline" className="text-xs">
-                            Hidden
-                          </Badge>
-                        )}
-                      </div>
-                    ))}
+                    {(pokemon.abilities ?? []).map((ability, index) => {
+                      const a: any = ability as any;
+                      const name = typeof a === "string" ? a : String(a?.name ?? "");
+                      const isHidden = typeof a === "object" ? Boolean(a?.isHidden) : false;
+
+                      return (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-2 bg-muted/30 rounded"
+                        >
+                          <span className="capitalize font-medium">
+                            {name.replace('-', ' ')}
+                          </span>
+                          {isHidden && (
+                            <Badge variant="outline" className="text-xs">
+                              Hidden
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
