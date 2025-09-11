@@ -110,6 +110,14 @@ export default function Pokedex() {
   // Gigantamax list state (client-side, uses lib/gigantamax.ts)
   const [gmaxList, setGmaxList] = useState<Pokemon[]>([]);
   const [gmaxLoading, setGmaxLoading] = useState(false);
+  // Add: visible count for Gigantamax (default 30)
+  const [gmaxVisibleCount, setGmaxVisibleCount] = useState(30);
+
+  // Mega Evolutions list state (client-side only for the specific list)
+  const [megaList, setMegaList] = useState<Pokemon[]>([]);
+  const [megaLoading, setMegaLoading] = useState(false);
+  // Add: visible count for Mega (default 30)
+  const [megaVisibleCount, setMegaVisibleCount] = useState(30);
 
   // Generation ID ranges used to auto-fetch when a region is selected but uncached
   const GEN_RANGES: Record<number, { start: number; end: number }> = {
@@ -134,10 +142,6 @@ export default function Pokedex() {
   const [altHasMore, setAltHasMore] = useState(false);
   const altQueueRef = useRef<string[] | null>(null);
   const [altLoading, setAltLoading] = useState(false);
-
-  // Mega Evolutions list state (client-side only for the specific list)
-  const [megaList, setMegaList] = useState<Pokemon[]>([]);
-  const [megaLoading, setMegaLoading] = useState(false);
 
   // Small helpers (scoped here to avoid leaking across app)
   async function delay(ms: number) {
@@ -185,10 +189,6 @@ export default function Pokedex() {
     "urshifu","zarude","calyrex","ursaluna","oinkologne","maushold","squawkabilly","palafin","tatsugiri",
     "dudunsparce","gimmighoul","poltchageist","sinistcha","ogerpon","terapagos"
   ];
-
-  // Add state for Mega and G-Max visible counts
-  const [megaVisibleCount, setMegaVisibleCount] = useState(30);
-  const [gmaxVisibleCount, setGmaxVisibleCount] = useState(30);
 
   // Build Pokemon from a pokemon/{name} entry (types, sprites, id, stats)
   const buildPokemonFromEntry = (p: any): Pokemon => ({
@@ -372,6 +372,7 @@ export default function Pokedex() {
       // Load megas
       setMegaList([]);
       setMegaLoading(true);
+      setMegaVisibleCount(30); // ensure default 30 on enter
       (async () => {
         try {
           const settled = await Promise.allSettled(MEGA_SPECIES.map((s) => fetchMegasForSpecies(s)));
@@ -383,7 +384,6 @@ export default function Pokedex() {
           }
           const finalList = Object.values(merged).sort((a, b) => a.pokemonId - b.pokemonId);
           setMegaList(finalList);
-          setMegaVisibleCount(30);
         } finally {
           setMegaLoading(false);
         }
@@ -392,6 +392,7 @@ export default function Pokedex() {
       // Leaving mega mode: reset mega list
       setMegaList([]);
       setMegaLoading(false);
+      setMegaVisibleCount(30); // reset on leave
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFormCategory]);
@@ -449,6 +450,7 @@ export default function Pokedex() {
       // Load Gmax list
       setGmaxList([]);
       setGmaxLoading(true);
+      setGmaxVisibleCount(30); // ensure default 30 on enter
       (async () => {
         try {
           const list = await fetchGigantamaxList(5);
@@ -474,7 +476,6 @@ export default function Pokedex() {
           }));
           // Ensure stable order by national dex id
           setGmaxList(mapped.sort((a, b) => a.pokemonId - b.pokemonId));
-          setGmaxVisibleCount(30);
         } catch (e) {
           const msg = e instanceof Error ? e.message : "Failed to load Gigantamax data";
           toast.error(msg);
@@ -486,6 +487,7 @@ export default function Pokedex() {
       // Leaving gigantaMax mode: reset gmax list
       setGmaxList([]);
       setGmaxLoading(false);
+      setGmaxVisibleCount(30); // reset on leave
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFormCategory]);
@@ -796,26 +798,6 @@ export default function Pokedex() {
       const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
       if (!nearBottom) return;
 
-      // Mega: client-side infinite after first manual load
-      if (selectedFormCategory === "mega") {
-        if (!infiniteEnabled) return;
-        const total = megaList.length;
-        if (megaVisibleCount < total) {
-          setMegaVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
-        }
-        return;
-      }
-
-      // Gigantamax: client-side infinite after first manual load
-      if (selectedFormCategory === "gigantamax") {
-        if (!infiniteEnabled) return;
-        const total = gmaxList.length;
-        if (gmaxVisibleCount < total) {
-          setGmaxVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
-        }
-        return;
-      }
-
       // Regional: client-side infinite after first manual load
       if (selectedFormCategory === "regional") {
         if (!infiniteEnabled) return;
@@ -833,6 +815,26 @@ export default function Pokedex() {
           // load next 30
           const token = altTokenRef.current;
           void loadAltUntil(altList.length + BATCH_LIMIT, token);
+        }
+        return;
+      }
+
+      // Mega: client-side visible count after first manual load
+      if (selectedFormCategory === "mega") {
+        if (!infiniteEnabled) return;
+        const total = megaList.length;
+        if (megaVisibleCount < total) {
+          setMegaVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
+        }
+        return;
+      }
+
+      // Gigantamax: client-side visible count after first manual load
+      if (selectedFormCategory === "gigantamax") {
+        if (!infiniteEnabled) return;
+        const total = gmaxList.length;
+        if (gmaxVisibleCount < total) {
+          setGmaxVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
         }
         return;
       }
@@ -890,6 +892,12 @@ export default function Pokedex() {
     if (selectedFormCategory === "regional") {
       setRegionalVisibleCount(30);
     }
+    if (selectedFormCategory === "mega") {
+      setMegaVisibleCount(30);
+    }
+    if (selectedFormCategory === "gigantamax") {
+      setGmaxVisibleCount(30);
+    }
   }, [searchQuery, selectedGeneration, showFavorites, selectedTypes.join(","), selectedFormCategory || ""]);
 
   // Append new page results
@@ -917,9 +925,9 @@ export default function Pokedex() {
   const displayPokemon = selectedFormCategory === "alternate"
     ? [...altList].sort((a, b) => a.pokemonId - b.pokemonId)
     : (selectedFormCategory === "mega"
-        ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, megaVisibleCount)
+        ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, megaVisibleCount)  // show 30 then paginate
         : (selectedFormCategory === "gigantamax"
-            ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, gmaxVisibleCount)
+            ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, gmaxVisibleCount) // show 30 then paginate
             : (selectedFormCategory === "regional"
                 ? regionalFlatList.slice(0, regionalVisibleCount)
                 : (showFavorites ? (favorites || []) : items))));
@@ -1167,7 +1175,7 @@ export default function Pokedex() {
                       onClick={() => {
                         const total = megaList.length;
                         setMegaVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
-                        setInfiniteEnabled(true);
+                        setInfiniteEnabled(true); // enable infinite after first manual load
                       }}
                       aria-label="Load more Pokémon"
                     >
@@ -1208,7 +1216,7 @@ export default function Pokedex() {
                       onClick={() => {
                         const total = gmaxList.length;
                         setGmaxVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
-                        setInfiniteEnabled(true);
+                        setInfiniteEnabled(true); // enable infinite after first manual load
                       }}
                       aria-label="Load more Pokémon"
                     >
