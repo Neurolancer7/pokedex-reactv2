@@ -758,6 +758,112 @@ export default function Pokedex() {
     }
   }, [pokemonData, showFavorites, selectedFormCategory, fetchPokemonData, isRefreshing]);
 
+  // Auto-fetch and cache Pokémon on first load if DB is empty
+  useEffect(() => {
+    if (showFavorites) return;
+    if (!pokemonData) return; // wait for first response
+    const total = pokemonData.total ?? 0;
+    if (total > 0) return;
+    if (autoFetchRef.current) return;
+
+    autoFetchRef.current = true;
+    setIsRefreshing(true);
+
+    const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
+    toast.promise(promise, {
+      loading: "Preparing Pokédex…",
+      success: (data) => {
+        const count = (data as any)?.cached ?? 0;
+        return `Pokémon data loaded! Cached ${count} entries.`;
+      },
+      error: (err) => (err instanceof Error ? err.message : "Failed to fetch Pokémon data"),
+    });
+
+    promise.finally(() => {
+      setIsRefreshing(false);
+    });
+  }, [pokemonData, showFavorites, fetchPokemonData]);
+
+  // Auto-fetch the selected generation if it appears uncached (no results after selecting)
+  useEffect(() => {
+    if (showFavorites) return;                // skip in favorites view
+    if (!selectedGeneration) return;          // only when a generation is chosen
+    if (isRefreshing) return;                 // avoid overlapping fetches
+    if (items.length > 0) return;             // results already present for this filter
+    if (fetchedGenRef.current.has(selectedGeneration)) return; // already tried this gen
+
+    const range = GEN_RANGES[selectedGeneration];
+    if (!range) return;
+
+    fetchedGenRef.current.add(selectedGeneration);
+    setIsRefreshing(true);
+
+    const promise = runWithRetries(() =>
+      fetchPokemonData({
+        limit: range.end - range.start + 1,
+        offset: range.start - 1,
+      })
+    );
+
+    toast.promise(promise, {
+      loading: `Fetching Generation ${selectedGeneration} Pokémon...`,
+      success: (data) => {
+        const count = (data as any)?.cached ?? 0;
+        return `Loaded ${count} Pokémon for Generation ${selectedGeneration}.`;
+      },
+      error: (err) => (err instanceof Error ? err.message : "Failed to load generation data"),
+    });
+
+    promise.finally(() => {
+      setIsRefreshing(false);
+    });
+  }, [selectedGeneration, items.length, showFavorites, fetchPokemonData, isRefreshing]);
+
+  // Auto-fetch full dataset if a Forms category is selected and results are empty (ensures form tags exist)
+  useEffect(() => {
+    if (showFavorites) return;
+    if (!selectedFormCategory) return;
+    if (isRefreshing) return;
+    if (items.length > 0) return;
+    if (fetchedFormCategoryRef.current.has(selectedFormCategory)) return;
+
+    fetchedFormCategoryRef.current.add(selectedFormCategory);
+    setIsRefreshing(true);
+
+    const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
+
+    toast.promise(promise, {
+      loading: `Preparing data for "${selectedFormCategory}" forms...`,
+      success: (data) => {
+        const count = (data as any)?.cached ?? 0;
+        return `Data ready! Cached ${count} entries.`;
+      },
+      error: (err) => (err instanceof Error ? err.message : "Failed to backfill form data"),
+    });
+
+    promise.finally(() => {
+      setIsRefreshing(false);
+    });
+  }, [selectedFormCategory, items.length, showFavorites, fetchPokemonData, isRefreshing]);
+
+  // Backfill all Pokémon in default (All Forms) state to ensure full dataset is available for infinite scroll
+  useEffect(() => {
+    // Only in default list (not favorites, not alternate forms)
+    if (showFavorites) return;
+    if (selectedFormCategory === "alternate") return;
+    if (!pokemonData) return;
+    if (isRefreshing) return;
+
+    const total = pokemonData.total ?? 0;
+    // If some data exists but it's not the full dex yet, backfill in the background
+    if (total > 0 && total < 1025) {
+      setIsRefreshing(true);
+      const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
+      // We keep this silent to avoid toasting during normal scroll; just ensure data gets filled
+      promise.finally(() => setIsRefreshing(false));
+    }
+  }, [pokemonData, showFavorites, selectedFormCategory, fetchPokemonData, isRefreshing]);
+
   // Infinite scroll: auto-load when near bottom (fallback button remains)
   useEffect(() => {
     const THRESHOLD_PX = 400;
@@ -843,13 +949,21 @@ export default function Pokedex() {
     setIsLoadingMore(false);
   }, [pokemonData, offset, showFavorites]);
 
+  const REGION_KEYWORDS: Array<string> = ["-alola", "-galar", "-hisui", "-paldea"];
+  const isRegionalFormName = (name: string) => {
+    const n = name.toLowerCase();
+    return REGION_KEYWORDS.some((k) => n.includes(k));
+  };
+
   const displayPokemon = selectedFormCategory === "alternate"
     ? [...altList].sort((a, b) => a.pokemonId - b.pokemonId)
     : (selectedFormCategory === "mega"
         ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId)
         : (selectedFormCategory === "gigantamax"
             ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId)
-            : (showFavorites ? (favorites || []) : items)));
+            : (selectedFormCategory === "regional"
+                ? (showFavorites ? (favorites || []) : items).filter(p => isRegionalFormName(p.name))
+                : (showFavorites ? (favorites || []) : items))));
 
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
   const isInitialLoading =
