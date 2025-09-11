@@ -906,8 +906,15 @@ export default function Pokedex() {
     if (!pokemonData || !pokemonData.pokemon) return;
 
     if (offset === 0) {
-      // On new filter/search, replace items with the first page
-      setItems(pokemonData.pokemon);
+      // On new filter/search, replace items with the first page (top up from next page if short)
+      const first = pokemonData.pokemon;
+      if (first.length < BATCH_LIMIT && nextPokemonData && Array.isArray(nextPokemonData.pokemon)) {
+        const needed = Math.max(0, BATCH_LIMIT - first.length);
+        const extra = nextPokemonData.pokemon.slice(0, needed);
+        setItems([...first, ...extra]);
+      } else {
+        setItems(first);
+      }
     } else {
       // Subsequent pages: append without duplicates
       setItems((prev) => {
@@ -920,7 +927,7 @@ export default function Pokedex() {
     const total = pokemonData.total ?? 0;
     setHasMore(offset + BATCH_LIMIT < total);
     setIsLoadingMore(false);
-  }, [pokemonData, offset, showFavorites]);
+  }, [pokemonData, nextPokemonData, offset, showFavorites]);
 
   const displayPokemon = selectedFormCategory === "alternate"
     ? [...altList].sort((a, b) => a.pokemonId - b.pokemonId)
