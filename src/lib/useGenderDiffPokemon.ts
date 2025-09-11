@@ -15,15 +15,76 @@ type HookResult = {
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// Add: small helpers
+async function delay(ms: number) {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
+async function fetchJsonWithRetry<T>(url: string, signal?: AbortSignal, attempts = 4, baseDelayMs = 250): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(url, { signal: signal ?? controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        // Retry on 5xx or 429
+        if ((res.status >= 500 || res.status === 429) && i < attempts - 1) {
+          await delay(baseDelayMs * Math.pow(2, i));
+          continue;
+        }
+        throw new Error(`HTTP ${res.status} for ${url}`);
+      }
+      return (await res.json()) as T;
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const retriable =
+        /NetworkError/i.test(msg) ||
+        /Failed to fetch/i.test(msg) ||
+        /AbortError/i.test(msg) ||
+        /fetch failed/i.test(msg) ||
+        /ETIMEDOUT/i.test(msg);
+      if (!retriable || i === attempts - 1) throw err;
+      await delay(baseDelayMs * Math.pow(2, i));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("Failed to fetch");
+}
+
+// Add: simple concurrency pool mapper
+async function poolMap<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let idx = 0;
+
+  const workers: Array<Promise<void>> = new Array(Math.min(concurrency, items.length))
+    .fill(0)
+    .map(async () => {
+      while (true) {
+        const current = idx++;
+        if (current >= items.length) break;
+        try {
+          const out = await mapper(items[current], current);
+          results[current] = { status: "fulfilled", value: out } as PromiseFulfilledResult<R>;
+        } catch (e) {
+          results[current] = { status: "rejected", reason: e } as PromiseRejectedResult;
+        }
+      }
+    });
+
+  await Promise.all(workers);
+  return results;
+}
+
 function stableKey(names: string[]): string {
   const sorted = [...names].map((n) => n.toLowerCase().trim()).sort();
   return `genderDiff:${sorted.join(",")}`;
-}
-
-async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  return (await res.json()) as T;
 }
 
 function officialArtworkById(id: number): string {
@@ -62,11 +123,14 @@ export function useGenderDiffPokemon(speciesNames: string[]): HookResult {
         }
       }
 
-      // Fetch all species concurrently
-      const settled = await Promise.allSettled(
-        speciesNames.map((name) =>
-          fetchJson<any>(`https://pokeapi.co/api/v2/pokemon/${name.toLowerCase().trim()}`, ctrl.signal)
-        )
+      // Fetch all species with bounded concurrency and retries
+      const settled = await poolMap(
+        speciesNames.map((n) => n.toLowerCase().trim()),
+        6, // concurrency limit
+        async (name) => {
+          const p = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${name}`, ctrl.signal, 4, 250);
+          return p;
+        }
       );
 
       const list: GenderDiffPokemon[] = [];
