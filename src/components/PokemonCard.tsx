@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Heart, Star, X, Gem } from "lucide-react";
+import { Heart, Star, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -111,18 +111,22 @@ export function PokemonCard({
           <div className="relative mb-4 flex justify-center">
             {isGmax && (
               <div className="absolute -top-1 -left-1">
-                <Badge className="rounded-full bg-red-600/95 text-white border-red-500/80 px-2 py-0.5 text-[10px] shadow inline-flex items-center gap-1">
-                  <X className="h-3 w-3" />
-                  G-MAX
-                </Badge>
+                <img
+                  src="https://harmless-tapir-303.convex.cloud/api/storage/63c94427-b9f7-4312-b254-b148bf2b227e"
+                  alt="Gigantamax"
+                  title="Gigantamax"
+                  className="h-5 w-5 drop-shadow"
+                />
               </div>
             )}
             {isMega && (
               <div className="absolute -top-1 -right-1">
-                <Badge className="rounded-full bg-yellow-500/90 text-white border-yellow-400/80 px-2 py-0.5 text-[10px] shadow inline-flex items-center gap-1">
-                  <Gem className="h-3 w-3" />
-                  MEGA
-                </Badge>
+                <img
+                  src="https://harmless-tapir-303.convex.cloud/api/storage/c454d9d0-824d-44a7-9f06-da70175922e2"
+                  alt="Mega Evolution"
+                  title="Mega Evolution"
+                  className="h-5 w-5 rounded-sm shadow"
+                />
               </div>
             )}
             <div className="w-24 h-24 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted rounded-full">

@@ -88,7 +88,7 @@ export function PokemonSearch({
     { value: "alternate", label: "Alternate Forms" },
     { value: "mega", label: "Mega Evolutions" },
     { value: "gigantamax", label: "Gigantamax Forms" },
-    { value: "gender", label: "Gender Differences" },
+    { value: "gender-diff", label: "Gender Differences" },
   ];
 
   return (

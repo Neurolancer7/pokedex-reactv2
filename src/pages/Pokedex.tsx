@@ -481,24 +481,35 @@ export default function Pokedex() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFormCategory]);
 
-  const pokemonData = useConvexQuery(api.pokemon.list, {
-    limit: showFavorites ? 0 : BATCH_LIMIT,
-    offset: showFavorites ? 0 : offset,
-    search: searchQuery || undefined,
-    types: selectedTypes.length > 0 ? selectedTypes : undefined,
-    generation: selectedGeneration,
-    forms: selectedFormCategory ? [selectedFormCategory] : undefined,
-  });
+  const pokemonData = useConvexQuery(
+    api.pokemon.list,
+    // Disable pokemon.list when showing the dedicated Gender Differences view to avoid heavy/irrelevant queries
+    selectedFormCategory === "gender-diff"
+      ? "skip"
+      : {
+          limit: showFavorites ? 0 : BATCH_LIMIT,
+          offset: showFavorites ? 0 : offset,
+          search: searchQuery || undefined,
+          types: selectedTypes.length > 0 ? selectedTypes : undefined,
+          generation: selectedGeneration,
+          forms: selectedFormCategory ? [selectedFormCategory] : undefined,
+        }
+  );
 
   // Prefetch next page to make clicking "Load More" feel instant
-  const nextPokemonData = useConvexQuery(api.pokemon.list, {
-    limit: showFavorites ? 0 : BATCH_LIMIT,
-    offset: showFavorites ? 0 : offset + BATCH_LIMIT,
-    search: searchQuery || undefined,
-    types: selectedTypes.length > 0 ? selectedTypes : undefined,
-    generation: selectedGeneration,
-    forms: selectedFormCategory ? [selectedFormCategory] : undefined,
-  });
+  const nextPokemonData = useConvexQuery(
+    api.pokemon.list,
+    selectedFormCategory === "gender-diff"
+      ? "skip"
+      : {
+          limit: showFavorites ? 0 : BATCH_LIMIT,
+          offset: showFavorites ? 0 : offset + BATCH_LIMIT,
+          search: searchQuery || undefined,
+          types: selectedTypes.length > 0 ? selectedTypes : undefined,
+          generation: selectedGeneration,
+          forms: selectedFormCategory ? [selectedFormCategory] : undefined,
+        }
+  );
 
   const favorites = useConvexQuery(
     api.pokemon.getFavorites,

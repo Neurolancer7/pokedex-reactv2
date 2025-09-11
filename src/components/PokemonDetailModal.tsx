@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Heart, Ruler, Weight, Zap, Shield, Sword, Activity, Gem } from "lucide-react";
+import { X, Heart, Ruler, Weight, Zap, Shield, Sword, Activity } from "lucide-react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Dialog,
@@ -268,10 +268,12 @@ export function PokemonDetailModal({
                 <DialogTitle className="text-2xl font-bold tracking-tight flex items-center gap-2">
                   {formatPokemonName(pokemon.name)}
                   {isMega && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/90 text-white border border-yellow-400/70 px-2 py-0.5 text-[10px] shadow">
-                      <Gem className="h-3 w-3" />
-                      MEGA
-                    </span>
+                    <img
+                      src="https://harmless-tapir-303.convex.cloud/api/storage/c454d9d0-824d-44a7-9f06-da70175922e2"
+                      alt="Mega Evolution"
+                      title="Mega Evolution"
+                      className="h-5 w-5 rounded-sm shadow"
+                    />
                   )}
                 </DialogTitle>
               </div>
@@ -344,10 +346,12 @@ export function PokemonDetailModal({
                   {/* G-MAX badge */}
                   {isGmax && (
                     <div className="absolute -top-2 -left-2">
-                      <span className="rounded-full bg-red-600/95 text-white border border-red-400/70 px-2 py-0.5 text-[10px] shadow flex items-center gap-1">
-                        <X className="h-3 w-3" />
-                        G-MAX
-                      </span>
+                      <img
+                        src="https://harmless-tapir-303.convex.cloud/api/storage/63c94427-b9f7-4312-b254-b148bf2b227e"
+                        alt="Gigantamax"
+                        title="Gigantamax"
+                        className="h-6 w-6 drop-shadow"
+                      />
                     </div>
                   )}
 

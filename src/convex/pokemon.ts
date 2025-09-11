@@ -72,7 +72,19 @@ export const list = query({
       // Normalize filters
       const search = args.search?.trim();
       const types = (args.types ?? []).map((t) => t.toLowerCase());
-      const forms = (args.forms ?? []).map((f) => f.toLowerCase());
+      // Normalize common aliases used by the UI
+      let forms = (args.forms ?? []).map((f) => f.toLowerCase());
+      forms = forms.map((f) => {
+        if (
+          f === "gender-diff" ||
+          f === "gender-diffs" ||
+          f === "gender-difference" ||
+          f === "gender-differences"
+        ) return "gender";
+        if (f === "gmax" || f === "g-max" || f === "gigantmax") return "gigantamax";
+        return f;
+      });
+
       const hasValidNumber =
         typeof args.generation === "number" &&
         Number.isFinite(args.generation);
@@ -205,6 +217,16 @@ export const list = query({
           // Add: fallback include for Gigantamax-capable species so results show even if forms cache isn't ready
           if (wanted.has("gigantamax")) {
             for (const id of GMAX_SPECIES) specificIds.add(id);
+          }
+
+          // NEW: include Pokémon with known gender differences from Bulbapedia cache
+          if (wanted.has("gender")) {
+            const genderRows = await ctx.db.query("genderDifferences").collect();
+            for (const g of genderRows) {
+              if (Number.isFinite(g.pokemonId)) {
+                specificIds.add(g.pokemonId as number);
+              }
+            }
           }
 
           results = results.filter((pokemon) => {
