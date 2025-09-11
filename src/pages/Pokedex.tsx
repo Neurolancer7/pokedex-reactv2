@@ -903,11 +903,7 @@ export default function Pokedex() {
                     <span className="sr-only">Loading Mega Evolutions…</span>
                   </div>
                 </div>
-              ) : (
-                <div className="text-muted-foreground text-sm">
-                  Showing Mega Evolutions for the selected species list
-                </div>
-              )}
+              ) : null}
             </div>
           ) : (
             <div className="mt-8 flex flex-col items-center gap-3">
