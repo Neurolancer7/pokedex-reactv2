@@ -498,12 +498,31 @@ export default function Pokedex() {
     }
   };
 
+  // Add a small retry helper for transient connection drops
+  const runWithRetries = async <T,>(fn: () => Promise<T>, attempts = 3, delayMs = 600): Promise<T> => {
+    let lastErr: unknown;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastErr = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        const retriable =
+          msg.includes("Connection lost while action was in flight") ||
+          msg.includes("NetworkError") ||
+          msg.includes("Failed to fetch");
+        if (!retriable || i === attempts - 1) throw err;
+        await new Promise((res) => setTimeout(res, delayMs * Math.pow(2, i)));
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error("Request failed");
+  };
+
   const handleDataRefresh = async () => {
     try {
-      // Start loading state
       setIsRefreshing(true);
 
-      const promise = fetchPokemonData({ limit: 1025, offset: 0 });
+      const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
       toast.promise(promise, {
         loading: "Fetching Pokémon data...",
         success: (data) => {
@@ -519,7 +538,6 @@ export default function Pokedex() {
       const message = error instanceof Error ? error.message : "Unexpected error while refreshing data";
       toast.error(message);
     } finally {
-      // Ensure loading state is cleared
       setIsRefreshing(false);
     }
   };
@@ -535,7 +553,7 @@ export default function Pokedex() {
     autoFetchRef.current = true;
     setIsRefreshing(true);
 
-    const promise = fetchPokemonData({ limit: 1025, offset: 0 });
+    const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
     toast.promise(promise, {
       loading: "Preparing Pokédex…",
       success: (data) => {
@@ -564,10 +582,12 @@ export default function Pokedex() {
     fetchedGenRef.current.add(selectedGeneration);
     setIsRefreshing(true);
 
-    const promise = fetchPokemonData({
-      limit: range.end - range.start + 1,
-      offset: range.start - 1,
-    });
+    const promise = runWithRetries(() =>
+      fetchPokemonData({
+        limit: range.end - range.start + 1,
+        offset: range.start - 1,
+      })
+    );
 
     toast.promise(promise, {
       loading: `Fetching Generation ${selectedGeneration} Pokémon...`,
@@ -594,7 +614,7 @@ export default function Pokedex() {
     fetchedFormCategoryRef.current.add(selectedFormCategory);
     setIsRefreshing(true);
 
-    const promise = fetchPokemonData({ limit: 1025, offset: 0 });
+    const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
 
     toast.promise(promise, {
       loading: `Preparing data for "${selectedFormCategory}" forms...`,
@@ -622,7 +642,7 @@ export default function Pokedex() {
     // If some data exists but it's not the full dex yet, backfill in the background
     if (total > 0 && total < 1025) {
       setIsRefreshing(true);
-      const promise = fetchPokemonData({ limit: 1025, offset: 0 });
+      const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
       // We keep this silent to avoid toasting during normal scroll; just ensure data gets filled
       promise.finally(() => setIsRefreshing(false));
     }
@@ -661,7 +681,7 @@ export default function Pokedex() {
         const totalNow = pokemonData?.total ?? 0;
         if (totalNow < 1025 && !isRefreshing) {
           setIsRefreshing(true);
-          const promise = fetchPokemonData({ limit: 1025, offset: 0 });
+          const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
           promise.finally(() => setIsRefreshing(false));
         }
 
@@ -979,11 +999,10 @@ export default function Pokedex() {
                           onClick={() => {
                             if (isLoadingMore) return;
 
-                            // Ensure the rest of the Pokédex is being backfilled in the background
                             const totalNow = pokemonData?.total ?? 0;
                             if (totalNow < 1025 && !isRefreshing) {
                               setIsRefreshing(true);
-                              const promise = fetchPokemonData({ limit: 1025, offset: 0 });
+                              const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
                               promise.finally(() => setIsRefreshing(false));
                             }
 
