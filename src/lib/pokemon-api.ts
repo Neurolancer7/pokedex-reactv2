@@ -63,6 +63,25 @@ export function formatPokemonId(id: number): string {
 }
 
 export function formatPokemonName(name: string): string {
+  // Special handling for Mega evolutions
+  const lower = name.toLowerCase();
+
+  const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  if (lower.endsWith("-mega-x")) {
+    const base = name.slice(0, -7); // remove "-mega-x"
+    return `Mega-${capitalize(base)} X`;
+  }
+  if (lower.endsWith("-mega-y")) {
+    const base = name.slice(0, -7); // remove "-mega-y"
+    return `Mega-${capitalize(base)} Y`;
+  }
+  if (lower.endsWith("-mega")) {
+    const base = name.slice(0, -5); // remove "-mega"
+    return `Mega-${capitalize(base)}`;
+  }
+
+  // Default: simple capitalize first letter
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
