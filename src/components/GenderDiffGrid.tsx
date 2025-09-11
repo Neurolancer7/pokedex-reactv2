@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { genderDiffSpecies } from "@/lib/genderDiffSpecies";
 import { useGenderDiffPokemon, spriteFromDexId } from "@/lib/useGenderDiffPokemon";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +20,8 @@ export function GenderDiffGrid({ species }: Props) {
   const [selected, setSelected] = useState<{ name: string; dexId: number } | null>(null);
   const [gender, setGender] = useState<"male" | "female">("male");
   const [imgKey, setImgKey] = useState(0); // forces img reload on toggle
+  const [bpLoading, setBpLoading] = useState(false);
+  const [bpError, setBpError] = useState<string | null>(null);
 
   const bulbapediaUrl = (name: string) => {
     const anchor = name.replace(/-/g, "_"); // closer to Bulbapedia's section ids
@@ -32,6 +34,40 @@ export function GenderDiffGrid({ species }: Props) {
     }
     return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${dexId}.png`;
   };
+
+  const checkBulbapedia = async (name: string) => {
+    const url = bulbapediaUrl(name);
+    setBpLoading(true);
+    setBpError(null);
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 8000);
+      // Attempt a simple GET. This may fail due to CORS, which we handle gracefully.
+      const res = await fetch(url, { method: "GET", signal: controller.signal });
+      clearTimeout(id);
+      // If we get a response but it's not ok, surface a concise error. Otherwise consider it reachable.
+      if (!res.ok) {
+        setBpError(`Bulbapedia responded with HTTP ${res.status}. You can still open the page directly.`);
+      }
+    } catch (e) {
+      // Network/CORS/Abort. Keep the link usable, just inform the user.
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      setBpError(`Could not verify Bulbapedia (possibly blocked by CORS or network). You can still open the page. (${msg})`);
+    } finally {
+      setBpLoading(false);
+    }
+  };
+
+  // Note: Best-effort, non-blocking; link remains available.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (open && selected?.name) {
+      checkBulbapedia(selected.name);
+    } else {
+      setBpLoading(false);
+      setBpError(null);
+    }
+  }, [open, selected?.name]);
 
   return (
     <div className="w-full">
@@ -195,6 +231,33 @@ export function GenderDiffGrid({ species }: Props) {
               <p className="text-sm text-muted-foreground">
                 This species exhibits gender-based visual differences. For a detailed description, visit the Bulbapedia entry.
               </p>
+
+              {bpLoading && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Checking Bulbapedia…
+                </div>
+              )}
+              {bpError && (
+                <div className="mt-2">
+                  <Alert>
+                    <AlertDescription className="flex items-center justify-between gap-2">
+                      <span className="text-xs">{bpError}</span>
+                      {selected?.name && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => checkBulbapedia(selected.name!)}
+                          className="gap-2"
+                        >
+                          <RotateCw className="h-4 w-4" />
+                          Retry
+                        </Button>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
+
               {selected && (
                 <div className="mt-3">
                   <Button asChild size="sm" variant="outline" className="gap-2">
