@@ -411,6 +411,8 @@ export default function Pokedex() {
 
       // Load exactly 30 by default (or as close as possible)
       loadAltUntil(30, token);
+
+      setInfiniteEnabled(false); // disable infinite until first manual load
     } else {
       // leaving alternate mode: invalidate and clean up
       altTokenRef.current += 1;
@@ -761,6 +763,12 @@ export default function Pokedex() {
     }
   }, [pokemonData, showFavorites, selectedFormCategory, fetchPokemonData, isRefreshing]);
 
+  // Enable auto infinite scroll only after first manual "Load More"
+  const [infiniteEnabled, setInfiniteEnabled] = useState(false);
+
+  // Regional client-side visible count (since regional data is client-only)
+  const [regionalVisibleCount, setRegionalVisibleCount] = useState(30);
+
   // Infinite scroll: auto-load when near bottom (fallback button remains)
   useEffect(() => {
     const THRESHOLD_PX = 400;
@@ -768,11 +776,6 @@ export default function Pokedex() {
     const handleScroll = () => {
       // Skip in favorites mode
       if (showFavorites) return;
-
-      // Disable auto infinite scroll for Alternate Forms (manual only)
-      if (selectedFormCategory === "alternate") {
-        return;
-      }
 
       const scrollY = window.scrollY || window.pageYOffset;
       const viewportH = window.innerHeight || document.documentElement.clientHeight;
@@ -784,13 +787,35 @@ export default function Pokedex() {
         document.body.clientHeight,
         document.documentElement.clientHeight
       );
-
       const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
       if (!nearBottom) return;
 
-      // Default list auto-fetch
+      // Regional: client-side infinite after first manual load
+      if (selectedFormCategory === "regional") {
+        if (!infiniteEnabled) return;
+        const total = regionalFlatList.length;
+        if (regionalVisibleCount < total) {
+          setRegionalVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
+        }
+        return;
+      }
+
+      // Alternate: infinite after first manual load
+      if (selectedFormCategory === "alternate") {
+        if (!infiniteEnabled) return;
+        if (altHasMore && !altLoading) {
+          // load next 30
+          const token = altTokenRef.current;
+          void loadAltUntil(altList.length + BATCH_LIMIT, token);
+        }
+        return;
+      }
+
+      // Default list auto-fetch only after enabling infinite
+      if (!infiniteEnabled) return;
+
       if (hasMore && !isLoadingMore) {
-        // Start background backfill if dataset is incomplete to avoid hitting "No more Pokémon"
+        // Start background backfill if dataset is incomplete
         const totalNow = pokemonData?.total ?? 0;
         if (totalNow < 1025 && !isRefreshing) {
           setIsRefreshing(true);
@@ -815,6 +840,15 @@ export default function Pokedex() {
     BATCH_LIMIT,
     setIsLoadingMore,
     setOffset,
+    pokemonData?.total,
+    isRefreshing,
+    fetchPokemonData,
+    infiniteEnabled,
+    regionalFlatList.length,
+    regionalVisibleCount,
+    altHasMore,
+    altLoading,
+    altList.length,
   ]);
 
   useEffect(() => {
@@ -822,6 +856,10 @@ export default function Pokedex() {
     setOffset(0);
     setHasMore(true);
     setIsLoadingMore(false);
+    setInfiniteEnabled(false); // require manual "Load More" again after any filter change
+    if (selectedFormCategory === "regional") {
+      setRegionalVisibleCount(30);
+    }
   }, [searchQuery, selectedGeneration, showFavorites, selectedTypes.join(","), selectedFormCategory || ""]);
 
   // Append new page results
@@ -853,7 +891,7 @@ export default function Pokedex() {
         : (selectedFormCategory === "gigantamax"
             ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId)
             : (selectedFormCategory === "regional"
-                ? regionalFlatList
+                ? regionalFlatList.slice(0, regionalVisibleCount)
                 : (showFavorites ? (favorites || []) : items))));
 
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
@@ -1049,6 +1087,7 @@ export default function Pokedex() {
                         const token = altTokenRef.current;
                         // Load 30 more entries
                         await loadAltUntil(current + 30, token);
+                        setInfiniteEnabled(true); // enable infinite scrolling after first manual load
                         if (!altQueueRef.current || altQueueRef.current.length === 0) {
                           // Only update hasMore if still valid
                           if (token === altTokenRef.current) {
@@ -1109,6 +1148,47 @@ export default function Pokedex() {
                 </div>
               ) : null}
             </div>
+          ) : selectedFormCategory === "regional" ? (
+            <div className="mt-8 flex flex-col items-center gap-3">
+              {regionalLoading ? (
+                <div
+                  className="w-full sm:w-auto flex items-center justify-center"
+                  aria-busy="true"
+                  aria-live="polite"
+                >
+                  <div className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg border border-white/10 flex items-center justify-center">
+                    <div className="h-9 w-9 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md shadow-primary/30 flex items-center justify-center animate-pulse">
+                      <img
+                        src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
+                        alt="Loading Pokéball"
+                        className="h-7 w-7 animate-bounce-spin drop-shadow"
+                      />
+                    </div>
+                    <span className="sr-only">Loading Regional forms…</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {regionalVisibleCount >= regionalFlatList.length && regionalFlatList.length > 0 && (
+                    <div className="text-muted-foreground text-sm">No more Pokémon</div>
+                  )}
+                  {regionalVisibleCount < regionalFlatList.length && (
+                    <Button
+                      variant="default"
+                      className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        const total = regionalFlatList.length;
+                        setRegionalVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
+                        setInfiniteEnabled(true); // enable infinite after first manual load
+                      }}
+                      aria-label="Load more Pokémon"
+                    >
+                      Load More
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
           ) : (
             <div className="mt-8 flex flex-col items-center gap-3">
               {!showFavorites && (
@@ -1154,6 +1234,7 @@ export default function Pokedex() {
 
                             setIsLoadingMore(true);
                             setOffset((o) => o + BATCH_LIMIT);
+                            setInfiniteEnabled(true); // enable infinite scrolling after first manual load
                           }}
                           disabled={isLoadingMore}
                           aria-busy={isLoadingMore}
