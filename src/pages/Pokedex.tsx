@@ -509,7 +509,7 @@ export default function Pokedex() {
   }, [pokemonData, offset, showFavorites]);
 
   const displayPokemon = selectedFormCategory === "alternate"
-    ? altList
+    ? [...altList].sort((a, b) => a.pokemonId - b.pokemonId) // ensure ascending dex order
     : (showFavorites ? (favorites || []) : items);
 
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
