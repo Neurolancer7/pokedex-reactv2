@@ -111,24 +111,30 @@ export function PokemonCard({
           <div className="relative mb-4 flex justify-center">
             {isGmax && (
               <div className="absolute -top-1 -left-1">
-                <img
-                  src="https://harmless-tapir-303.convex.cloud/api/storage/63c94427-b9f7-4312-b254-b148bf2b227e"
-                  alt="Gigantamax"
+                <span
                   title="Gigantamax"
-                  className="h-6 w-6 drop-shadow"
-                />
+                  aria-label="Gigantamax form"
+                  className="inline-flex items-center justify-center rounded-full bg-white/90 backdrop-blur border shadow p-1 ring-1 ring-pink-500/40"
+                >
+                  <img
+                    src="https://harmless-tapir-303.convex.cloud/api/storage/63c94427-b9f7-4312-b254-b148bf2b227e"
+                    alt="Gigantamax"
+                    className="h-5 w-5 object-contain drop-shadow"
+                  />
+                </span>
               </div>
             )}
             {isMega && (
               <div className="absolute -top-1 -right-1">
                 <span
                   title="Mega Evolution"
-                  className="inline-flex items-center justify-center rounded-full bg-white/90 backdrop-blur border shadow p-1"
+                  aria-label="Mega Evolution"
+                  className="inline-flex items-center justify-center rounded-full bg-white/90 backdrop-blur border shadow p-1 ring-1 ring-fuchsia-500/40"
                 >
                   <img
                     src="https://harmless-tapir-303.convex.cloud/api/storage/c454d9d0-824d-44a7-9f06-da70175922e2"
                     alt="Mega Evolution"
-                    className="h-5 w-5 object-contain"
+                    className="h-5 w-5 object-contain drop-shadow"
                   />
                 </span>
               </div>
