@@ -195,12 +195,13 @@ export default function Pokedex() {
   });
 
   // Fetch next batch of species -> varieties -> pokemon details; append to altList
-  const fetchNextAltBatch = async (speciesCount = 12) => {
+  // - Returns the new total length after merge
+  const fetchNextAltBatch = async (speciesCount = 12): Promise<number> => {
     if (!altQueueRef.current || altQueueRef.current.length === 0) {
       setAltHasMore(false);
-      return;
+      return altList.length;
     }
-    if (altLoading) return;
+    if (altLoading) return altList.length;
 
     setAltLoading(true);
     try {
@@ -230,7 +231,7 @@ export default function Pokedex() {
       }
 
       // Dedup by pokemonId and sort by id
-      let newLen = 0; // track new total for auto-top-up
+      let newLen = altList.length;
       setAltList((prev) => {
         const map: Record<number, Pokemon> = Object.create(null);
         for (const p of prev) map[p.pokemonId] = p;
@@ -242,21 +243,28 @@ export default function Pokedex() {
 
       setAltHasMore(Boolean(altQueueRef.current && altQueueRef.current.length > 0));
 
-      // Auto-fetch more until at least 30 are loaded (if queue remains)
-      if (newLen < 30 && altQueueRef.current && altQueueRef.current.length > 0) {
-        setTimeout(() => {
-          // call again with same larger batch size
-          fetchNextAltBatch(12).catch(() => {
-            toast.error("Failed to load more alternate forms.");
-          });
-        }, 0);
-      }
+      return newLen;
     } finally {
       setAltLoading(false);
     }
   };
 
-  // When switching into Alternate Forms filter, reset local queue and list, and auto-load first batch
+  // Load until at least `target` total items are present (or queue is exhausted)
+  const loadAltUntil = async (targetTotal: number) => {
+    try {
+      // Use bigger species batch to speed up
+      while ((altList.length < targetTotal) && altQueueRef.current && altQueueRef.current.length > 0) {
+        const newLen = await fetchNextAltBatch(20);
+        if (newLen >= targetTotal) break;
+        // small pause to yield UI
+        await delay(0);
+      }
+    } catch {
+      toast.error("Failed to load alternate forms.");
+    }
+  };
+
+  // When switching into Alternate Forms filter, reset local queue and list, and load exactly 30 by default
   useEffect(() => {
     if (selectedFormCategory === "alternate") {
       // clear default list & pagination context so only alt data shows
@@ -270,10 +278,8 @@ export default function Pokedex() {
       setAltList([]);
       setAltHasMore(altQueueRef.current.length > 0);
 
-      // prime a larger first batch for faster initial content
-      fetchNextAltBatch(12).catch(() => {
-        toast.error("Failed to load alternate forms. Try again.");
-      });
+      // Load exactly 30 by default (or as close as possible)
+      loadAltUntil(30);
     } else {
       // leaving alternate mode
       altQueueRef.current = null;
@@ -487,6 +493,11 @@ export default function Pokedex() {
       // Skip in favorites mode
       if (showFavorites) return;
 
+      // Disable auto infinite scroll for Alternate Forms (manual only)
+      if (selectedFormCategory === "alternate") {
+        return;
+      }
+
       const scrollY = window.scrollY || window.pageYOffset;
       const viewportH = window.innerHeight || document.documentElement.clientHeight;
       const docH = Math.max(
@@ -500,16 +511,6 @@ export default function Pokedex() {
 
       const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
       if (!nearBottom) return;
-
-      // Alternate forms mode auto-fetch
-      if (selectedFormCategory === "alternate") {
-        if (!altHasMore || altLoading) return;
-        // fetch a small batch for smoother UX
-        fetchNextAltBatch(6).catch(() => {
-          toast.error("Failed to load more alternate forms.");
-        });
-        return;
-      }
 
       // Default list auto-fetch
       if (hasMore && !isLoadingMore) {
@@ -525,12 +526,9 @@ export default function Pokedex() {
   }, [
     showFavorites,
     selectedFormCategory,
-    altHasMore,
-    altLoading,
     hasMore,
     isLoadingMore,
     BATCH_LIMIT,
-    fetchNextAltBatch,
     setIsLoadingMore,
     setOffset,
   ]);
@@ -745,11 +743,14 @@ export default function Pokedex() {
                     <Button
                       variant="default"
                       className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                      onClick={() => {
+                      onClick={async () => {
                         if (altLoading) return;
-                        fetchNextAltBatch(5).catch(() => {
-                          toast.error("Failed to load more alternate forms.");
-                        });
+                        const current = altList.length;
+                        // Load 30 more entries
+                        await loadAltUntil(current + 30);
+                        if (!altQueueRef.current || altQueueRef.current.length === 0) {
+                          setAltHasMore(false);
+                        }
                       }}
                       disabled={altLoading}
                       aria-busy={altLoading}
