@@ -13,6 +13,7 @@ import { PokemonSearch } from "@/components/PokemonSearch";
 import { PokemonGrid } from "@/components/PokemonGrid";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlternateForms } from "@/components/AlternateForms";
 
 class ErrorBoundary extends React.Component<{ onRetry: () => void; children: React.ReactNode }, { hasError: boolean; errorMessage?: string }> {
   constructor(props: { onRetry: () => void; children: React.ReactNode }) {
@@ -343,9 +344,8 @@ export default function Pokedex() {
     setIsLoadingMore(false);
   }, [pokemonData, offset, showFavorites]);
 
-  // Removed IntersectionObserver to disable auto-loading; now only manual "Load More"
-
-  // Removed page reset effect; infinite scroll manages fetching via offset.
+  // Compute main content conditionally:
+  const showAlternateForms = selectedFormCategory === "alternate";
 
   const displayPokemon = showFavorites ? (favorites || []) : items;
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
@@ -483,25 +483,26 @@ export default function Pokedex() {
           )}
 
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
-            <PokemonGrid
-              key={`${showFavorites ? "fav" : "infinite"}-${selectedGeneration ?? "all"}-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
-              pokemon={displayPokemon}
-              favorites={favoriteIds}
-              onFavoriteToggle={handleFavoriteToggle}
-              isLoading={isInitialLoading}
-            />
+            {showAlternateForms ? (
+              <AlternateForms />
+            ) : (
+              <PokemonGrid
+                key={`${showFavorites ? "fav" : "infinite"}-${selectedGeneration ?? "all"}-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
+                pokemon={displayPokemon}
+                favorites={favoriteIds}
+                onFavoriteToggle={handleFavoriteToggle}
+                isLoading={isInitialLoading}
+              />
+            )}
           </motion.div>
 
-          {/* Load-more controls and sentinel */}
-          {!showFavorites && (
+          {!showFavorites && !showAlternateForms && (
             <div className="mt-8 flex flex-col items-center gap-3">
               {!hasMore && items.length > 0 && (
                 <div className="text-muted-foreground text-sm">No more Pokémon</div>
               )}
-
               {hasMore && (
                 <>
-                  {/* Show animated Pokéball loader while loading, else the Load More button */}
                   {isLoadingMore ? (
                     <div
                       className="w-full sm:w-auto flex items-center justify-center"
@@ -524,7 +525,6 @@ export default function Pokedex() {
                       variant="default"
                       className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                       onClick={() => {
-                        // Keep page static during load; only extend after data arrives
                         if (isLoadingMore) return;
                         setIsLoadingMore(true);
                         setOffset((o) => o + BATCH_LIMIT);
@@ -539,8 +539,6 @@ export default function Pokedex() {
                   )}
                 </>
               )}
-
-              {/* Removed sentinel; manual loading only */}
             </div>
           )}
         </main>

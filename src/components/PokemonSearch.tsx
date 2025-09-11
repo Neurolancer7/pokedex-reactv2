@@ -73,7 +73,7 @@ export function PokemonSearch({
     onFilterChange({
       types: selectedTypes,
       generation: selectedGeneration,
-      formCategory: value === "all" ? undefined : value,
+      formCategory: value === "any" ? "any" : value,
     });
   };
 
@@ -167,17 +167,14 @@ export function PokemonSearch({
         {/* Add: Forms Filter */}
         <div className="shrink-0">
           <Select
-            value={selectedFormCategory || "all"}
+            value={selectedFormCategory || "any"}
             onValueChange={handleFormsChange}
           >
             <SelectTrigger className="w-40 sm:w-48">
               <SelectValue placeholder="Forms" />
             </SelectTrigger>
             <SelectContent>
-              {/* New: real "All Forms" union filter */}
               <SelectItem value="any">All Forms</SelectItem>
-              {/* Renamed: clear/no filter option */}
-              <SelectItem value="all">No Forms Filter</SelectItem>
               {FORM_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
