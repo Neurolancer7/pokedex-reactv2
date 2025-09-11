@@ -128,6 +128,10 @@ export default function Pokedex() {
   const altQueueRef = useRef<string[] | null>(null);
   const [altLoading, setAltLoading] = useState(false);
 
+  // Mega Evolutions list state (client-side only for the specific list)
+  const [megaList, setMegaList] = useState<Pokemon[]>([]);
+  const [megaLoading, setMegaLoading] = useState(false);
+
   // Small helpers (scoped here to avoid leaking across app)
   async function delay(ms: number) {
     return new Promise((res) => setTimeout(res, ms));
@@ -274,6 +278,82 @@ export default function Pokedex() {
       toast.error("Failed to load alternate forms.");
     }
   };
+
+  // Add: Species list for Mega Evolutions (normalized lowercase)
+  const MEGA_SPECIES: string[] = [
+    "venusaur","charizard","blastoise","beedrill","pidgeot","alakazam","slowbro","gengar","kangaskhan","pinsir",
+    "gyarados","aerodactyl","mewtwo","ampharos","steelix","scizor","heracross","houndoom","tyranitar","sceptile",
+    "blaziken","swampert","gardevoir","sableye","mawile","aggron","medicham","manectric","sharpedo","camerupt",
+    "altaria","banette","absol","latias","latios","rayquaza","lopunny","gallade","audino","diancie"
+  ];
+
+  // Add: Fetch Mega evolutions for a species by scanning its varieties' pokemon that include "mega"
+  const fetchMegasForSpecies = async (speciesName: string): Promise<Pokemon[]> => {
+    try {
+      const speciesData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${speciesName}`);
+      const varieties: Array<{ pokemon: { name: string; url: string } }> =
+        Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
+
+      const settled = await Promise.allSettled(
+        varieties
+          .map((v) => v?.pokemon?.name)
+          .filter((n): n is string => !!n)
+          // Only fetch varieties that look like Mega forms by name
+          .filter((n) => n.includes("mega"))
+          .map(async (pokeName) => {
+            const p = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${pokeName}`);
+            return buildPokemonFromEntry(p);
+          })
+      );
+
+      const out: Pokemon[] = [];
+      for (const r of settled) if (r.status === "fulfilled") out.push(r.value);
+      return out;
+    } catch {
+      return [];
+    }
+  };
+
+  // Add: When switching into Mega Evolutions filter, clear current list and load only the requested megas
+  useEffect(() => {
+    if (selectedFormCategory === "mega") {
+      // Clear default/alt contexts so only megas show
+      setItems([]);
+      setOffset(0);
+      setHasMore(false);
+      setIsLoadingMore(false);
+
+      // Clear alternate context too
+      altQueueRef.current = null;
+      setAltList([]);
+      setAltHasMore(false);
+      setAltLoading(false);
+
+      // Load megas
+      setMegaList([]);
+      setMegaLoading(true);
+      (async () => {
+        try {
+          const settled = await Promise.allSettled(MEGA_SPECIES.map((s) => fetchMegasForSpecies(s)));
+          const merged: Record<number, Pokemon> = Object.create(null);
+          for (const r of settled) {
+            if (r.status === "fulfilled") {
+              for (const p of r.value) merged[p.pokemonId] = p;
+            }
+          }
+          const finalList = Object.values(merged).sort((a, b) => a.pokemonId - b.pokemonId);
+          setMegaList(finalList);
+        } finally {
+          setMegaLoading(false);
+        }
+      })();
+    } else {
+      // Leaving mega mode: reset mega list
+      setMegaList([]);
+      setMegaLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFormCategory]);
 
   // When switching into Alternate Forms filter, reset local queue and list, and load exactly 30 by default
   useEffect(() => {
@@ -600,14 +680,18 @@ export default function Pokedex() {
   }, [pokemonData, offset, showFavorites]);
 
   const displayPokemon = selectedFormCategory === "alternate"
-    ? [...altList].sort((a, b) => a.pokemonId - b.pokemonId) // ensure ascending dex order
-    : (showFavorites ? (favorites || []) : items);
+    ? [...altList].sort((a, b) => a.pokemonId - b.pokemonId)
+    : (selectedFormCategory === "mega"
+        ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId)
+        : (showFavorites ? (favorites || []) : items));
 
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
   const isInitialLoading =
     selectedFormCategory === "alternate"
       ? altList.length === 0 && (altLoading || isLoadingMore)
-      : (!showFavorites && pokemonData === undefined && items.length === 0);
+      : (selectedFormCategory === "mega"
+          ? megaList.length === 0 && megaLoading
+          : (!showFavorites && pokemonData === undefined && items.length === 0));
 
   const totalItems = showFavorites ? (favorites?.length ?? 0) : (pokemonData?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalItems / INITIAL_LIMIT));
@@ -800,14 +884,42 @@ export default function Pokedex() {
                 </>
               )}
             </div>
+          ) : selectedFormCategory === "mega" ? (
+            <div className="mt-8 flex flex-col items-center gap-3">
+              {megaLoading ? (
+                <div
+                  className="w-full sm:w-auto flex items-center justify-center"
+                  aria-busy="true"
+                  aria-live="polite"
+                >
+                  <div className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg border border-white/10 flex items-center justify-center">
+                    <div className="h-9 w-9 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md shadow-primary/30 flex items-center justify-center animate-pulse">
+                      <img
+                        src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
+                        alt="Loading Pokéball"
+                        className="h-7 w-7 animate-bounce-spin drop-shadow"
+                      />
+                    </div>
+                    <span className="sr-only">Loading Mega Evolutions…</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-muted-foreground text-sm">
+                  Showing Mega Evolutions for the selected species list
+                </div>
+              )}
+            </div>
           ) : (
             <div className="mt-8 flex flex-col items-center gap-3">
               {!showFavorites && (
                 <>
-                  {!hasMore && items.length > 0 && (
+                  {/* Show "No more Pokémon" only if we know the full dex is cached */}
+                  {!hasMore && items.length > 0 && (pokemonData?.total ?? 0) >= 1025 && (
                     <div className="text-muted-foreground text-sm">No more Pokémon</div>
                   )}
-                  {hasMore && (
+
+                  {/* Show Load More when there are more pages OR dataset incomplete */}
+                  {(hasMore || ((pokemonData?.total ?? 0) < 1025)) && (
                     <>
                       {isLoadingMore ? (
                         <div
