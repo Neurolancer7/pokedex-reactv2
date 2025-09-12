@@ -226,7 +226,7 @@ export function PokemonGrid({
         >
           {pokemon.map((poke, index) => (
             <motion.div
-              key={poke.pokemonId}
+              key={`${poke.pokemonId}-${poke.name}`}
               variants={cardVariants}
               initial="visible"
               animate="visible"

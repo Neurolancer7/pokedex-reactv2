@@ -123,3 +123,36 @@ export function calculateStatPercentage(stat: number): number {
   // Max base stat is around 255, so we'll use that as 100%
   return Math.min((stat / 255) * 100, 100);
 }
+
+// Add: helper to normalize names to PokeAPI slugs and handle edge cases
+export function normalizePokemonName(name: string): string {
+  const SPECIAL_CASES: Record<string, string> = {
+    toxtricity: "toxtricity-amped",
+    "mr. mime": "mr-mime",
+    "mr mime": "mr-mime",
+    "mr-mime": "mr-mime",
+    "mime jr.": "mime-jr",
+    "mime jr": "mime-jr",
+    "type: null": "type-null",
+    "type null": "type-null",
+    "farfetch'd": "farfetchd",
+    "farfetch’d": "farfetchd",
+    "sirfetch'd": "sirfetchd",
+    "sirfetch’d": "sirfetchd",
+    "nidoran♀": "nidoran-f",
+    "nidoran♀️": "nidoran-f",
+    "nidoran♂": "nidoran-m",
+    "nidoran♂️": "nidoran-m",
+  };
+
+  const raw = name.trim().toLowerCase();
+  if (SPECIAL_CASES[raw]) return SPECIAL_CASES[raw];
+
+  // Strip diacritics, remove punctuation, collapse whitespace to hyphens
+  const withoutDiacritics = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const cleaned = withoutDiacritics
+    .replace(/[:.'’]/g, "") // remove punctuation commonly found in names
+    .replace(/\s+/g, "-"); // spaces to hyphens
+
+  return cleaned;
+}
