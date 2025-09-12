@@ -119,8 +119,15 @@ export default function Pokedex() {
 
   const INITIAL_LIMIT = 1025; // Show all; removes need for pagination
 
-  const computedLimit = INITIAL_LIMIT;
-  const computedOffset = 0; // Always start at 0 since we load all
+  const PAGE_SIZE = Number((import.meta as any)?.env?.VITE_DEFAULT_PAGE_SIZE) || 40;
+  const API_BASE: string =
+    ((import.meta as any)?.env?.VITE_POKEAPI_URL as string) || "https://pokeapi.co/api/v2";
+
+  const [masterList, setMasterList] = useState<Pokemon[]>([]);
+  const [loadingMaster, setLoadingMaster] = useState(false);
+  const [masterError, setMasterError] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [infiniteEnabled, setInfiniteEnabled] = useState(false);
 
   // Alternate-forms mode local state
   const [altList, setAltList] = useState<Pokemon[]>([]);
@@ -159,228 +166,209 @@ export default function Pokedex() {
     throw lastErr instanceof Error ? lastErr : new Error("Failed to fetch");
   }
 
-  // Token to invalidate stale alternate-forms fetches
-  const altTokenRef = useRef(0);
+  // Add: Transform raw PokeAPI pokemon into our Pokemon interface
+  function buildPokemonFromEntry(p: any): Pokemon {
+    const sprites = p?.sprites ?? {};
+    const other = sprites?.other ?? {};
+    const official =
+      other?.["official-artwork"]?.front_default ??
+      other?.dream_world?.front_default ??
+      sprites?.front_default ??
+      undefined;
 
-  // Species buckets to derive alternate forms from (varieties -> pokemon entries)
-  const ALT_SPECIES: string[] = [
-    "tauros","pichu","unown","castform","kyogre","groudon","deoxys","burmy","wormadam",
-    "cherrim","shellos","gastrodon","rotom","dialga","palkia","giratina","shaymin","arceus",
-    "basculin","basculegion","darmanitan","deerling","sawsbuck","tornadus","thundurus","landorus","enamorus",
-    "kyurem","keldeo","meloetta","genesect","greninja","vivillon","flabebe","floette","florges","furfrou",
-    "meowstic","aegislash","pumpkaboo","gourgeist","xerneas","zygarde","hoopa","oricorio","lycanroc",
-    "wishiwashi","silvally","minior","mimikyu","necrozma","magearna","cramorant","toxtricity",
-    "sinistea","polteageist","alcremie","eiscue","indeedee","morpeko","zacian","zamazenta","eternatus",
-    "urshifu","zarude","calyrex","ursaluna","oinkologne","maushold","squawkabilly","palafin","tatsugiri",
-    "dudunsparce","gimmighoul","poltchageist","sinistcha","ogerpon","terapagos"
-  ];
+    const types: string[] = Array.isArray(p?.types)
+      ? p.types.map((t: any) => String(t?.type?.name || "")).filter(Boolean)
+      : [];
 
-  // Build Pokemon from a pokemon/{name} entry (types, sprites, id, stats)
-  const buildPokemonFromEntry = (p: any): Pokemon => ({
-    pokemonId: Number(p?.id ?? 0),
-    name: String(p?.name ?? ""),
-    height: Number(p?.height ?? 0),
-    weight: Number(p?.weight ?? 0),
-    baseExperience: typeof p?.base_experience === "number" ? p.base_experience : undefined,
-    types: Array.isArray(p?.types) ? p.types.map((t: any) => String(t?.type?.name ?? "")) : [],
-    abilities: Array.isArray(p?.abilities) ? p.abilities.map((a: any) => String(a?.ability?.name ?? "")) : [],
-    stats: Array.isArray(p?.stats)
-      ? p.stats.map((s: any) => ({ name: String(s?.stat?.name ?? ""), value: Number(s?.base_stat ?? 0) }))
-      : [],
-    sprites: {
-      frontDefault: p?.sprites?.front_default ?? undefined,
-      frontShiny: p?.sprites?.front_shiny ?? undefined,
-      officialArtwork: p?.sprites?.other?.["official-artwork"]?.front_default ?? undefined,
-    },
-    moves: Array.isArray(p?.moves) ? p.moves.map((m: any) => String(m?.move?.name ?? "")) : [],
-    generation: 0,
-    species: undefined,
+    const abilities: Array<{ name: string; isHidden: boolean }> = Array.isArray(p?.abilities)
+      ? p.abilities.map((a: any) => ({
+          name: String(a?.ability?.name || ""),
+          isHidden: Boolean(a?.is_hidden),
+        }))
+      : [];
+
+    const stats: Array<{ name: string; baseStat: number; effort: number }> = Array.isArray(p?.stats)
+      ? p.stats.map((s: any) => ({
+          name: String(s?.stat?.name || ""),
+          baseStat: Number(s?.base_stat || 0),
+          effort: Number(s?.effort || 0),
+        }))
+      : [];
+
+    const moves: string[] = Array.isArray(p?.moves)
+      ? p.moves.map((m: any) => String(m?.move?.name || "")).filter(Boolean)
+      : [];
+
+    const pokemon: Pokemon = {
+      pokemonId: Number(p?.id || 0),
+      name: String(p?.name || ""),
+      height: Number(p?.height || 0),
+      weight: Number(p?.weight || 0),
+      baseExperience: p?.base_experience ?? undefined,
+      types,
+      abilities,
+      stats,
+      sprites: {
+        frontDefault: sprites?.front_default || undefined,
+        frontShiny: sprites?.front_shiny || undefined,
+        officialArtwork: official || undefined,
+      },
+      moves,
+      generation: 0, // not used in UI here
+      species: undefined,
+    };
+
+    return pokemon;
+  }
+
+  // Fetch all Pokémon (including forms) directly from PokeAPI
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        setLoadingMaster(true);
+        setMasterError(null);
+
+        // 1) List all pokemon (base + forms)
+        const list = await fetchJsonWithRetry<{ results: { name: string; url: string }[] }>(
+          `${API_BASE}/pokemon?limit=2000`
+        );
+        const names: string[] = Array.isArray(list?.results)
+          ? (list.results.map((r) => r?.name).filter(Boolean) as string[])
+          : [];
+
+        // 2) Concurrency-limited detail fetch
+        const limit = 24;
+        let idx = 0;
+        const out: Pokemon[] = [];
+        const workers: Array<Promise<void>> = [];
+
+        const worker = async () => {
+          while (idx < names.length) {
+            const i = idx++;
+            const name = names[i];
+            try {
+              const p = await fetchJsonWithRetry<any>(`${API_BASE}/pokemon/${name}`);
+              const built = buildPokemonFromEntry(p);
+
+              // derive parent national dex for sorting via species url (if available)
+              const speciesUrl = p?.species?.url as string | undefined;
+              const parentDex = Number(String(speciesUrl || "").match(/\/pokemon-species\/(\d+)\//)?.[1] || built.pokemonId);
+
+              (built as any).__parentDex = Number.isFinite(parentDex) ? parentDex : built.pokemonId;
+              out.push(built);
+            } catch {
+              // ignore broken entries
+            }
+          }
+        };
+
+        for (let k = 0; k < limit; k++) workers.push(worker());
+        await Promise.all(workers);
+
+        // 3) Sort strictly by parent national dex ascending, fallback to own id
+        out.sort((a: any, b: any) => {
+          const pa = Number(a?.__parentDex ?? a.pokemonId);
+          const pb = Number(b?.__parentDex ?? b.pokemonId);
+          if (pa !== pb) return pa - pb;
+          return a.pokemonId - b.pokemonId;
+        });
+
+        // Drop temp field and update state
+        const cleaned: Pokemon[] = out.map((p: any) => {
+          const { __parentDex, ...rest } = p;
+          return rest as Pokemon;
+        });
+
+        setMasterList(cleaned);
+        setVisibleCount(PAGE_SIZE);
+        toast.success("Pokémon data updated successfully!");
+      } catch (error) {
+        console.error("Error refreshing data:", error);
+        const message = error instanceof Error ? error.message : "Unexpected error while refreshing data";
+        setMasterError(message);
+        toast.error(message);
+      } finally {
+        setIsRefreshing(false);
+        setLoadingMaster(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [API_BASE, PAGE_SIZE]);
+
+  // Client-side filtering for search and types; ignore form categories for the unified list
+  const filteredList = masterList.filter((p) => {
+    const matchesSearch =
+      !searchQuery ||
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(p.pokemonId).includes(searchQuery.trim());
+    const matchesTypes =
+      selectedTypes.length === 0 ||
+      p.types.some((t) => selectedTypes.includes(String(t).toLowerCase()));
+    return matchesSearch && matchesTypes;
   });
 
-  // Fetch next batch of species -> varieties -> pokemon details; append to altList
-  // - Returns the new total length after merge
-  const fetchNextAltBatch = async (speciesCount = 16, token?: number): Promise<number> => {
-    // If another run started, ignore this call
-    if (typeof token === "number" && token !== altTokenRef.current) {
-      return altList.length;
-    }
-    if (!altQueueRef.current || altQueueRef.current.length === 0) {
-      setAltHasMore(false);
-      return altList.length;
-    }
-    if (altLoading) return altList.length;
+  // Reset visible count when filters/search change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+    setHasMore(true);
+    setIsLoadingMore(false);
+    setInfiniteEnabled(false);
+  }, [searchQuery, selectedTypes.join(",") /* ignore forms filter intentionally */]);
 
-    setAltLoading(true);
-    try {
-      const batch = altQueueRef.current.splice(0, speciesCount);
+  // Derive display items
+  const displayPokemon = filteredList.slice(0, visibleCount);
 
-      // Early exit if token invalidated during queue mutation
-      if (typeof token === "number" && token !== altTokenRef.current) {
-        return altList.length;
-      }
+  // Maintain hasMore based on filtered length
+  useEffect(() => {
+    setHasMore(visibleCount < filteredList.length);
+  }, [visibleCount, filteredList.length]);
 
-      // Process species in parallel to speed up
-      const settled = await Promise.allSettled(
-        batch.map(async (speciesName) => {
-          // species -> varieties
-          const speciesData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${speciesName}`);
-          const varieties: Array<{ pokemon: { name: string; url: string } }> =
-            Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
+  // Override infinite scroll to use visibleCount / filteredList
+  useEffect(() => {
+    const THRESHOLD_PX = 400;
 
-          // Fetch all variety pokemon in parallel (no per-item delay)
-          const pokemonSettled = await Promise.allSettled(
-            varieties
-              .map((v) => v?.pokemon?.name)
-              .filter((name): name is string => Boolean(name))
-              .map(async (pokeName) => {
-                const p = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${pokeName}`);
-                return buildPokemonFromEntry(p);
-              })
-          );
-
-          const speciesResults: Pokemon[] = [];
-          for (const r of pokemonSettled) {
-            if (r.status === "fulfilled") speciesResults.push(r.value);
-          }
-          return speciesResults;
-        })
+    const handleScroll = () => {
+      const scrollY = window.scrollY || window.pageYOffset;
+      const viewportH =
+        window.innerHeight || document.documentElement.clientHeight;
+      const docH = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.offsetHeight,
+        document.body.clientHeight,
+        document.documentElement.clientHeight
       );
+      const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
+      if (!nearBottom) return;
 
-      // If invalidated while fetching, stop
-      if (typeof token === "number" && token !== altTokenRef.current) {
-        return altList.length;
+      if (!infiniteEnabled) return;
+      if (visibleCount < filteredList.length && !isLoadingMore) {
+        setIsLoadingMore(true);
+        setTimeout(() => {
+          setVisibleCount((c) => Math.min(c + PAGE_SIZE, filteredList.length));
+          setIsLoadingMore(false);
+        }, 0);
       }
+    };
 
-      const results: Pokemon[] = [];
-      for (const r of settled) {
-        if (r.status === "fulfilled" && Array.isArray(r.value)) {
-          results.push(...r.value);
-        }
-      }
-
-      // Dedup by pokemonId and sort by id
-      let newLen = altList.length;
-      setAltList((prev) => {
-        const map: Record<number, Pokemon> = Object.create(null);
-        for (const p of prev) map[p.pokemonId] = p;
-        for (const p of results) map[p.pokemonId] = p;
-        const merged = Object.values(map).sort((a, b) => a.pokemonId - b.pokemonId);
-        newLen = merged.length;
-        return merged;
-      });
-
-      // Only update hasMore if token still valid
-      if (typeof token !== "number" || token === altTokenRef.current) {
-        setAltHasMore(Boolean(altQueueRef.current && altQueueRef.current.length > 0));
-      }
-
-      return newLen;
-    } finally {
-      // Only clear loading if token still valid
-      if (typeof token !== "number" || token === altTokenRef.current) {
-        setAltLoading(false);
-      }
-    }
-  };
-
-  // Load until at least `target` total items are present (or queue is exhausted)
-  const loadAltUntil = async (targetTotal: number, token?: number) => {
-    try {
-      // Use a bigger species batch to speed up filling to the target quickly
-      while (
-        (typeof token !== "number" || token === altTokenRef.current) &&
-        (altList.length < targetTotal) &&
-        altQueueRef.current &&
-        altQueueRef.current.length > 0
-      ) {
-        const newLen = await fetchNextAltBatch(24, token);
-        if (typeof token === "number" && token !== altTokenRef.current) break;
-        if (newLen >= targetTotal) break;
-        // small pause to yield UI
-        await delay(0);
-      }
-    } catch {
-      toast.error("Failed to load alternate forms.");
-    }
-  };
-
-  // Add: Species list for Mega Evolutions (normalized lowercase)
-  const MEGA_SPECIES: string[] = [
-    "venusaur","charizard","blastoise","beedrill","pidgeot","alakazam","slowbro","gengar","kangaskhan","pinsir",
-    "gyarados","aerodactyl","mewtwo","ampharos","steelix","scizor","heracross","houndoom","tyranitar","sceptile",
-    "blaziken","swampert","gardevoir","sableye","mawile","aggron","medicham","manectric","sharpedo","camerupt",
-    "altaria","banette","absol","latias","latios","rayquaza","lopunny","gallade","audino","diancie"
-  ];
-
-  // Add: When switching into Mega Evolutions filter, clear current list and load only the requested megas
-  const fetchMegasForSpecies = async (speciesName: string): Promise<Pokemon[]> => {
-    try {
-      const speciesData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${speciesName}`);
-      const varieties: Array<{ pokemon: { name: string; url: string } }> =
-        Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
-
-      const settled = await Promise.allSettled(
-        varieties
-          .map((v) => v?.pokemon?.name)
-          .filter((n): n is string => !!n)
-          // Only fetch varieties that look like Mega forms by name
-          .filter((n) => n.includes("mega"))
-          .map(async (pokeName) => {
-            const p = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${pokeName}`);
-            return buildPokemonFromEntry(p);
-          })
-      );
-
-      const out: Pokemon[] = [];
-      for (const r of settled) if (r.status === "fulfilled") out.push(r.value);
-      return out;
-    } catch {
-      return [];
-    }
-  };
-
-  const pokemonData = useConvexQuery(
-    api.pokemon.list,
-    DATA_DISABLED
-      ? "skip"
-      : (selectedFormCategory === "gender-diff"
-          ? "skip"
-          : {
-              limit: showFavorites ? 0 : BATCH_LIMIT,
-              offset: showFavorites ? 0 : offset,
-              search: searchQuery || undefined,
-              types: selectedTypes.length > 0 ? selectedTypes : undefined,
-              forms: selectedFormCategory ? [selectedFormCategory] : undefined,
-            })
-  );
-
-  const nextPokemonData = useConvexQuery(
-    api.pokemon.list,
-    DATA_DISABLED
-      ? "skip"
-      : (selectedFormCategory === "gender-diff"
-          ? "skip"
-          : {
-              limit: showFavorites ? 0 : BATCH_LIMIT,
-              offset: showFavorites ? 0 : offset + BATCH_LIMIT,
-              search: searchQuery || undefined,
-              types: selectedTypes.length > 0 ? selectedTypes : undefined,
-              forms: selectedFormCategory ? [selectedFormCategory] : undefined,
-            })
-  );
-
-  const favorites = useConvexQuery(
-    api.pokemon.getFavorites,
-    DATA_DISABLED ? "skip" : (isAuthenticated ? {} : undefined)
-  );
-
-  const addToFavorites = useConvexMutation(api.pokemon.addToFavorites);
-  const removeFromFavorites = useConvexMutation(api.pokemon.removeFromFavorites);
-  const fetchPokemonData = useAction(api.pokemonData.fetchAndCachePokemon);
-  const clearCache = useConvexMutation(api.pokemon.clearCache);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [infiniteEnabled, visibleCount, filteredList.length, PAGE_SIZE, isLoadingMore]);
 
   // Disable any automatic data backfill or auto-fetching
   const AUTO_FETCH_ENABLED = false;
+
+  // Add: local no-op stubs to remove backend dependencies safely
+  const clearCache = async (_args?: any) => {};
+  const fetchPokemonData = async (_args: any) => ({ cached: 0, total: 0, pokemon: [] as Pokemon[] });
+  const pokemonData: any = undefined;
+  const nextPokemonData: any = undefined;
 
   // On page load: purge all cached data (pokemon, species, forms, regional, gender)
   useEffect(() => {
@@ -418,31 +406,9 @@ export default function Pokedex() {
     setSelectedFormCategory(filters.formCategory);
   };
 
-  const handleFavoriteToggle = async (pokemonId: number) => {
-    if (DATA_DISABLED) {
-      toast("Favorites are disabled for this demo");
-      return;
-    }
-    if (!isAuthenticated) {
-      toast.error("Please sign in to manage favorites");
-      return;
-    }
-
-    try {
-      const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
-      const isFavorite = favoriteIds.includes(pokemonId);
-
-      if (isFavorite) {
-        await removeFromFavorites({ pokemonId });
-        toast.success("Removed from favorites");
-      } else {
-        await addToFavorites({ pokemonId });
-        toast.success("Added to favorites");
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to update favorites";
-      toast.error(message);
-    }
+  const handleFavoriteToggle = async (_pokemonId: number) => {
+    toast("Favorites are disabled for this demo");
+    return;
   };
 
   // Strengthen retry helper for transient Convex/Network hiccups
@@ -499,290 +465,78 @@ export default function Pokedex() {
   };
 
   const handleDataRefresh = async () => {
-    if (DATA_DISABLED) {
-      toast("Data is disabled for this demo");
-      return;
-    }
     try {
       setIsRefreshing(true);
+      setLoadingMaster(true);
+      setMasterError(null);
 
-      const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
-      toast.promise(promise, {
-        loading: "Fetching Pokémon data...",
-        success: (data) => {
-          const count = (data as any)?.cached ?? 0;
-          return `Pokémon data updated successfully! Cached ${count} entries.`;
-        },
-        error: (err) => (err instanceof Error ? err.message : "Failed to fetch Pokémon data"),
+      // 1) List all pokemon (base + forms)
+      const list = await fetchJsonWithRetry<{ results: { name: string; url: string }[] }>(
+        `${API_BASE}/pokemon?limit=2000`
+      );
+      const names: string[] = Array.isArray(list?.results)
+        ? (list.results.map((r) => r?.name).filter(Boolean) as string[])
+        : [];
+
+      // 2) Concurrency-limited detail fetch
+      const limit = 24;
+      let idx = 0;
+      const out: Pokemon[] = [];
+      const workers: Array<Promise<void>> = [];
+
+      const worker = async () => {
+        while (idx < names.length) {
+          const i = idx++;
+          const name = names[i];
+          try {
+            const p = await fetchJsonWithRetry<any>(`${API_BASE}/pokemon/${name}`);
+            const built = buildPokemonFromEntry(p);
+
+            // derive parent national dex for sorting via species url (if available)
+            const speciesUrl = p?.species?.url as string | undefined;
+            const parentDex = Number(String(speciesUrl || "").match(/\/pokemon-species\/(\d+)\//)?.[1] || built.pokemonId);
+
+            (built as any).__parentDex = Number.isFinite(parentDex) ? parentDex : built.pokemonId;
+            out.push(built);
+          } catch {
+            // ignore broken entries
+          }
+        }
+      };
+
+      for (let k = 0; k < limit; k++) workers.push(worker());
+      await Promise.all(workers);
+
+      // 3) Sort strictly by parent national dex ascending, fallback to own id
+      out.sort((a: any, b: any) => {
+        const pa = Number(a?.__parentDex ?? a.pokemonId);
+        const pb = Number(b?.__parentDex ?? b.pokemonId);
+        if (pa !== pb) return pa - pb;
+        return a.pokemonId - b.pokemonId;
       });
 
-      await promise;
+      // Drop temp field and update state
+      const cleaned: Pokemon[] = out.map((p: any) => {
+        const { __parentDex, ...rest } = p;
+        return rest as Pokemon;
+      });
+
+      setMasterList(cleaned);
+      setVisibleCount(PAGE_SIZE);
+      toast.success("Pokémon data updated successfully!");
     } catch (error) {
       console.error("Error refreshing data:", error);
       const message = error instanceof Error ? error.message : "Unexpected error while refreshing data";
+      setMasterError(message);
       toast.error(message);
     } finally {
       setIsRefreshing(false);
+      setLoadingMaster(false);
     }
   };
 
-  // Auto-fetch and cache Pokémon on first load if DB is empty
-  useEffect(() => {
-    if (DATA_DISABLED) return; // fully disabled
-    if (!AUTO_FETCH_ENABLED) return; // disable auto-loading entirely
-    if (showFavorites) return;
-    if (!pokemonData) return; // wait for first response
-    const total = pokemonData.total ?? 0;
-    if (total > 0) return;
-    if (autoFetchRef.current) return;
-
-    autoFetchRef.current = true;
-    setIsRefreshing(true);
-
-    const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
-    toast.promise(promise, {
-      loading: "Preparing Pokédex…",
-      success: (data) => {
-        const count = (data as any)?.cached ?? 0;
-        return `Pokémon data loaded! Cached ${count} entries.`;
-      },
-      error: (err) => (err instanceof Error ? err.message : "Failed to fetch Pokémon data"),
-    });
-
-    promise.finally(() => {
-      setIsRefreshing(false);
-    });
-  }, [pokemonData, showFavorites, fetchPokemonData]);
-
-  // Auto-fetch full dataset if a Forms category is selected and results are empty (ensures form tags exist)
-  useEffect(() => {
-    if (DATA_DISABLED) return; // fully disabled
-    if (!AUTO_FETCH_ENABLED) return; // disable auto-loading entirely
-    if (showFavorites) return;
-    if (!selectedFormCategory) return;
-    if (isRefreshing) return;
-    if (items.length > 0) return;
-    if (fetchedFormCategoryRef.current.has(selectedFormCategory)) return;
-
-    fetchedFormCategoryRef.current.add(selectedFormCategory);
-    setIsRefreshing(true);
-
-    const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
-
-    toast.promise(promise, {
-      loading: `Preparing data for "${selectedFormCategory}" forms...`,
-      success: (data) => {
-        const count = (data as any)?.cached ?? 0;
-        return `Data ready! Cached ${count} entries.`;
-      },
-      error: (err) => (err instanceof Error ? err.message : "Failed to backfill form data"),
-    });
-
-    promise.finally(() => {
-      setIsRefreshing(false);
-    });
-  }, [selectedFormCategory, items.length, showFavorites, fetchPokemonData, isRefreshing]);
-
-  // Backfill all Pokémon in default (All Forms) state to ensure full dataset is available for infinite scroll
-  useEffect(() => {
-    if (DATA_DISABLED) return; // fully disabled
-    if (!AUTO_FETCH_ENABLED) return; // disable auto-loading entirely
-    if (showFavorites) return;
-    if (!pokemonData) return;
-    if (isRefreshing) return;
-
-    const total = pokemonData.total ?? 0;
-    // If some data exists but it's not the full dex yet, backfill in the background
-    if (total > 0 && total < 1025) {
-      setIsRefreshing(true);
-      const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
-      // We keep this silent to avoid toasting during normal scroll; just ensure data gets filled
-      promise.finally(() => setIsRefreshing(false));
-    }
-  }, [pokemonData, showFavorites, selectedFormCategory, fetchPokemonData, isRefreshing]);
-
-  // Enable auto infinite scroll only after first manual "Load More"
-  const [infiniteEnabled, setInfiniteEnabled] = useState(false);
-
-  // Infinite scroll: auto-load when near bottom (fallback button remains)
-  useEffect(() => {
-    if (DATA_DISABLED) return; // fully disabled, no listeners
-    const THRESHOLD_PX = 400;
-
-    const handleScroll = () => {
-      // Skip in favorites mode
-      if (showFavorites) return;
-
-      const scrollY = window.scrollY || window.pageYOffset;
-      const viewportH = window.innerHeight || document.documentElement.clientHeight;
-      const docH = Math.max(
-        document.body.scrollHeight,
-        document.documentElement.scrollHeight,
-        document.body.offsetHeight,
-        document.documentElement.offsetHeight,
-        document.body.clientHeight,
-        document.documentElement.clientHeight
-      );
-      const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
-      if (!nearBottom) return;
-
-      // Alternate: infinite after first manual load
-      if (selectedFormCategory === "alternate") {
-        if (!infiniteEnabled) return;
-        if (altHasMore && !altLoading) {
-          // load next 30
-          const token = altTokenRef.current;
-          void loadAltUntil(altList.length + BATCH_LIMIT, token);
-        }
-        return;
-      }
-
-      // Mega: client-side visible count after first manual load
-      if (selectedFormCategory === "mega") {
-        if (!infiniteEnabled) return;
-        const total = megaList.length;
-        if (megaVisibleCount < total) {
-          setMegaVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
-        }
-        return;
-      }
-
-      // Gigantamax: client-side visible count after first manual load
-      if (selectedFormCategory === "gigantamax") {
-        if (!infiniteEnabled) return;
-        const total = gmaxList.length;
-        if (gmaxVisibleCount < total) {
-          setGmaxVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
-        }
-        return;
-      }
-
-      // Default list auto-fetch only after enabling infinite
-      if (!infiniteEnabled) return;
-
-      if (hasMore && !isLoadingMore) {
-        // Start background backfill if dataset is incomplete
-        const totalNow = pokemonData?.total ?? 0;
-        if (AUTO_FETCH_ENABLED && totalNow < 1025 && !isRefreshing) {
-          setIsRefreshing(true);
-          const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
-          promise.finally(() => setIsRefreshing(false));
-        }
-
-        setIsLoadingMore(true);
-        setOffset((o) => o + BATCH_LIMIT);
-      }
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-    };
-  }, [
-    showFavorites,
-    selectedFormCategory,
-    hasMore,
-    isLoadingMore,
-    BATCH_LIMIT,
-    setIsLoadingMore,
-    setOffset,
-    pokemonData?.total,
-    isRefreshing,
-    fetchPokemonData,
-    infiniteEnabled,
-    altHasMore,
-    altLoading,
-    altList.length,
-    megaList.length,
-    megaVisibleCount,
-    gmaxList.length,
-    gmaxVisibleCount,
-  ]);
-
-  useEffect(() => {
-    setItems([]);
-    setOffset(0);
-    setHasMore(true);
-    setIsLoadingMore(false);
-    setInfiniteEnabled(false); // require manual "Load More" again after any filter change
-  }, [searchQuery, showFavorites, selectedTypes.join(","), selectedFormCategory || ""]);
-
-  // Append new page results
-  useEffect(() => {
-    if (DATA_DISABLED) return; // fully disabled
-    if (showFavorites) return; // favorites view doesn't paginate
-    if (!pokemonData || !pokemonData.pokemon) return;
-
-    if (offset === 0) {
-      // On new filter/search, replace items with the first page (top up from next page if short)
-      const first = pokemonData.pokemon;
-      if (first.length < BATCH_LIMIT && nextPokemonData && Array.isArray(nextPokemonData.pokemon)) {
-        const needed = Math.max(0, BATCH_LIMIT - first.length);
-        const extra = nextPokemonData.pokemon.slice(0, needed);
-        setItems([...first, ...extra]);
-      } else {
-        setItems(first);
-      }
-    } else {
-      // Subsequent pages: append without duplicates
-      setItems((prev) => {
-        const seen = new Set(prev.map((p) => p.pokemonId));
-        const appended = pokemonData.pokemon.filter((p) => !seen.has(p.pokemonId));
-        return appended.length ? [...prev, ...appended] : prev;
-      });
-    }
-
-    const total = pokemonData.total ?? 0;
-    setHasMore(offset + BATCH_LIMIT < total);
-    setIsLoadingMore(false);
-  }, [pokemonData, nextPokemonData, offset, showFavorites]);
-
-  const displayPokemon = selectedFormCategory === "alternate"
-    ? [...altList].sort((a, b) => a.pokemonId - b.pokemonId)
-    : (selectedFormCategory === "mega"
-        ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, megaVisibleCount)
-        : (selectedFormCategory === "gigantamax"
-            ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, gmaxVisibleCount)
-            : (() => {
-                // Default: list or favorites, enforce generation range if selected
-                const base = showFavorites ? (favorites || []) : items;
-                let arr = [...base];
-
-                return arr.sort((a, b) => a.pokemonId - b.pokemonId);
-              })()
-          )
-      );
-
-  const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
-  const isInitialLoading = false;
-
-  const totalItems = showFavorites ? (favorites?.length ?? 0) : (pokemonData?.total ?? 0);
-  const totalPages = Math.max(1, Math.ceil(totalItems / INITIAL_LIMIT));
-
-  const getPageNumbers = (current: number, total: number): Array<number | "ellipsis"> => {
-    const pages: Array<number | "ellipsis"> = [];
-    const add = (p: number | "ellipsis") => pages.push(p);
-
-    const start = Math.max(2, current - 1);
-    const end = Math.min(total - 1, current + 1);
-
-    add(1);
-    if (start > 2) add("ellipsis");
-    for (let p = start; p <= end; p++) add(p);
-    if (end < total - 1) add("ellipsis");
-    if (total > 1) add(total);
-
-    if (current === 2) pages.splice(1, 0, 2);
-    if (current === total - 1 && total > 2) pages.splice(pages.length - 1, 0, total - 1);
-
-    const seen = new Set<string>();
-    return pages.filter((p) => {
-      const key = String(p);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  };
+  // Right before return: define a simple initial loading flag for the empty state
+  const isInitialLoading = loadingMaster;
 
   return (
     <ErrorBoundary onRetry={handleDataRefresh}>
@@ -887,28 +641,26 @@ export default function Pokedex() {
           )}
 
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
-            {selectedFormCategory === "gender-diff" && !DATA_DISABLED ? (
-              <GenderDiffGrid />
-            ) : (
-              <PokemonGrid
-                key={`${selectedFormCategory === "alternate" ? "alt" : (showFavorites ? "fav" : "infinite")
-                }-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
-                pokemon={[] as unknown as Pokemon[]}
-                favorites={[]}
-                onFavoriteToggle={handleFavoriteToggle}
-                isLoading={false}
-              />
-            )}
+            {/* Always render the unified grid */}
+            <PokemonGrid
+              key={`unified-${selectedTypes.join(",")}-${searchQuery}`}
+              pokemon={displayPokemon as unknown as Pokemon[]}
+              favorites={[]}
+              onFavoriteToggle={handleFavoriteToggle}
+              isLoading={loadingMaster}
+            />
           </motion.div>
 
-          {selectedFormCategory === "alternate" ? (
-            <div className="mt-8 flex flex-col items-center gap-3">
-              {!altHasMore && altList.length > 0 && (
+          {/* Unified Load More section */}
+          <div className="mt-8 flex flex-col items-center gap-3">
+            <>
+              {!hasMore && displayPokemon.length > 0 && (
                 <div className="text-muted-foreground text-sm">No more Pokémon</div>
               )}
-              {altHasMore && (
+
+              {hasMore && (
                 <>
-                  {altLoading ? (
+                  {isLoadingMore ? (
                     <div
                       className="w-full sm:w-auto flex items-center justify-center"
                       aria-busy="true"
@@ -929,22 +681,19 @@ export default function Pokedex() {
                     <Button
                       variant="default"
                       className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                      onClick={async () => {
-                        if (altLoading) return;
-                        const current = altList.length;
-                        const token = altTokenRef.current;
-                        // Load 30 more entries
-                        await loadAltUntil(current + 30, token);
-                        setInfiniteEnabled(true); // enable infinite scrolling after first manual load
-                        if (!altQueueRef.current || altQueueRef.current.length === 0) {
-                          // Only update hasMore if still valid
-                          if (token === altTokenRef.current) {
-                            setAltHasMore(false);
-                          }
-                        }
+                      onClick={() => {
+                        if (isLoadingMore) return;
+                        setIsLoadingMore(true);
+                        setTimeout(() => {
+                          setVisibleCount((c) =>
+                            Math.min(c + PAGE_SIZE, filteredList.length)
+                          );
+                          setIsLoadingMore(false);
+                          setInfiniteEnabled(true); // enable infinite after first manual load
+                        }, 0);
                       }}
-                      disabled={altLoading}
-                      aria-busy={altLoading}
+                      disabled={isLoadingMore || loadingMaster}
+                      aria-busy={isLoadingMore}
                       aria-live="polite"
                       aria-label="Load more Pokémon"
                     >
@@ -953,150 +702,8 @@ export default function Pokedex() {
                   )}
                 </>
               )}
-            </div>
-          ) : selectedFormCategory === "mega" ? (
-            <div className="mt-8 flex flex-col items-center gap-3">
-              {megaLoading ? (
-                <div
-                  className="w-full sm:w-auto flex items-center justify-center"
-                  aria-busy="true"
-                  aria-live="polite"
-                >
-                  <div className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg border border-white/10 flex items-center justify-center">
-                    <div className="h-9 w-9 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md shadow-primary/30 flex items-center justify-center animate-pulse">
-                      <img
-                        src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
-                        alt="Loading Pokéball"
-                        className="h-7 w-7 animate-bounce-spin drop-shadow"
-                      />
-                    </div>
-                    <span className="sr-only">Loading Mega Evolutions…</span>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {megaVisibleCount >= megaList.length && megaList.length > 0 && (
-                    <div className="text-muted-foreground text-sm">No more Pokémon</div>
-                  )}
-                  {megaVisibleCount < megaList.length && (
-                    <Button
-                      variant="default"
-                      className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                      onClick={() => {
-                        const total = megaList.length;
-                        setMegaVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
-                        setInfiniteEnabled(true); // enable infinite after first manual load
-                      }}
-                      aria-label="Load more Pokémon"
-                    >
-                      Load More
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-          ) : selectedFormCategory === "gigantamax" ? (
-            <div className="mt-8 flex flex-col items-center gap-3">
-              {gmaxLoading ? (
-                <div
-                  className="w-full sm:w-auto flex items-center justify-center"
-                  aria-busy="true"
-                  aria-live="polite"
-                >
-                  <div className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg border border-white/10 flex items-center justify-center">
-                    <div className="h-9 w-9 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md shadow-primary/30 flex items-center justify-center animate-pulse">
-                      <img
-                        src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
-                        alt="Loading Pokéball"
-                        className="h-7 w-7 animate-bounce-spin drop-shadow"
-                      />
-                    </div>
-                    <span className="sr-only">Loading Gigantamax forms…</span>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {gmaxVisibleCount >= gmaxList.length && gmaxList.length > 0 && (
-                    <div className="text-muted-foreground text-sm">No more Pokémon</div>
-                  )}
-                  {gmaxVisibleCount < gmaxList.length && (
-                    <Button
-                      variant="default"
-                      className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                      onClick={() => {
-                        const total = gmaxList.length;
-                        setGmaxVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
-                        setInfiniteEnabled(true); // enable infinite after first manual load
-                      }}
-                      aria-label="Load more Pokémon"
-                    >
-                      Load More
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="mt-8 flex flex-col items-center gap-3">
-              {!showFavorites && (
-                <>
-                  {/* Show "No more Pokémon" only if we know the full dex is cached */}
-                  {!hasMore && items.length > 0 && (pokemonData?.total ?? 0) >= 1025 && (
-                    <div className="text-muted-foreground text-sm">No more Pokémon</div>
-                  )}
-
-                  {/* Show Load More when there are more pages OR dataset incomplete */}
-                  {(hasMore || ((pokemonData?.total ?? 0) < 1025)) && (
-                    <>
-                      {isLoadingMore ? (
-                        <div
-                          className="w-full sm:w-auto flex items-center justify-center"
-                          aria-busy="true"
-                          aria-live="polite"
-                        >
-                          <div className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg border border-white/10 flex items-center justify-center">
-                            <div className="h-9 w-9 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md shadow-primary/30 flex items-center justify-center animate-pulse">
-                              <img
-                                src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
-                                alt="Loading Pokéball"
-                                className="h-7 w-7 animate-bounce-spin drop-shadow"
-                              />
-                            </div>
-                            <span className="sr-only">Loading more Pokémon…</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <Button
-                          variant="default"
-                          className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                          onClick={() => {
-                            if (isLoadingMore) return;
-
-                            const totalNow = pokemonData?.total ?? 0;
-                            if (AUTO_FETCH_ENABLED && totalNow < 1025 && !isRefreshing) {
-                              setIsRefreshing(true);
-                              const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
-                              promise.finally(() => setIsRefreshing(false));
-                            }
-
-                            setIsLoadingMore(true);
-                            setOffset((o) => o + BATCH_LIMIT);
-                            setInfiniteEnabled(true); // enable infinite scrolling after first manual load
-                          }}
-                          disabled={isLoadingMore}
-                          aria-busy={isLoadingMore}
-                          aria-live="polite"
-                          aria-label="Load more Pokémon"
-                        >
-                          Load More
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+            </>
+          </div>
         </main>
       </div>
     </ErrorBoundary>
