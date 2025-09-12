@@ -22,6 +22,56 @@ type ApiResponse = {
 
 const FALLBACK_SPRITE = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png";
 
+const REQUEST_TIMEOUT_MS = 15000;
+const MAX_RETRIES = 3;
+
+// Internal: Fetch JSON with timeout + retries (429/5xx) and better errors
+async function fetchJsonWithRetry(url: string, signal?: AbortSignal) {
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      // Prefer external signal (to cancel across calls), fall back to local controller
+      const res = await fetch(url, { signal: signal ?? controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) {
+        // Retry on transient errors (429, 5xx)
+        if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES - 1) {
+          await new Promise((r) => setTimeout(r, 200 * Math.pow(2, attempt)));
+          continue;
+        }
+        let detail = "";
+        try {
+          const body = await res.text();
+          detail = body?.slice(0, 256) || "";
+        } catch {
+          // ignore
+        }
+        throw new Error(`HTTP ${res.status} ${res.statusText}${detail ? ` - ${detail}` : ""}`);
+      }
+      try {
+        return await res.json();
+      } catch {
+        throw new Error("Invalid JSON response from server");
+      }
+    } catch (e) {
+      clearTimeout(timeout);
+      lastErr = e;
+      // Abort errors or final attempt -> throw
+      if (e instanceof DOMException && e.name === "AbortError") {
+        throw new Error("Request aborted or timed out");
+      }
+      if (attempt < MAX_RETRIES - 1) {
+        await new Promise((r) => setTimeout(r, 200 * Math.pow(2, attempt)));
+        continue;
+      }
+      throw e instanceof Error ? e : new Error(String(e));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("Unknown fetch error");
+}
+
 export function useRegionalDex(regionName: string) {
   const [items, setItems] = useState<RegionDexEntry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -30,8 +80,15 @@ export function useRegionalDex(regionName: string) {
   const [offset, setOffset] = useState(0);
   const limitRef = useRef(40);
   const region = String(regionName || "").toLowerCase();
+  const abortRef = useRef<AbortController | null>(null);
 
   const reset = useCallback(() => {
+    // Cancel any in-flight request
+    try {
+      abortRef.current?.abort();
+    } catch {
+      // ignore
+    }
     setItems([]);
     setTotalCount(0);
     setOffset(0);
@@ -41,16 +98,21 @@ export function useRegionalDex(regionName: string) {
   const fetchPage = useCallback(
     async (nextOffset: number) => {
       if (!region) return;
+      // Cancel any previous page fetch before starting a new one
+      try {
+        abortRef.current?.abort();
+      } catch {
+        // ignore
+      }
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(
-          `/api/regional-pokedex?region=${encodeURIComponent(region)}&limit=${limitRef.current}&offset=${nextOffset}`
-        );
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status} ${res.statusText}`);
-        }
-        const json: ApiResponse = await res.json();
+        const url = `/api/regional-pokedex?region=${encodeURIComponent(region)}&limit=${limitRef.current}&offset=${nextOffset}`;
+        const json: ApiResponse = await fetchJsonWithRetry(url, controller.signal);
+
         const normalized: RegionDexEntry[] = (json?.data ?? []).map((r) => ({
           dexId: Number(r.dexId),
           name: String(r.name),
@@ -82,7 +144,10 @@ export function useRegionalDex(regionName: string) {
         setOffset(nextOffset + limitRef.current);
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Failed to load region";
-        setError(msg);
+        // If aborted due to region change/unmount, do not set an error
+        if (!(e instanceof Error && (e.message.includes("aborted") || e.message.includes("timed out")))) {
+          setError(msg);
+        }
       } finally {
         setLoading(false);
       }
@@ -96,6 +161,14 @@ export function useRegionalDex(regionName: string) {
     if (region) {
       fetchPage(0);
     }
+    // Cleanup on unmount: abort in-flight
+    return () => {
+      try {
+        abortRef.current?.abort();
+      } catch {
+        // ignore
+      }
+    };
   }, [region, reset, fetchPage]);
 
   const loadMore = useCallback(async () => {
