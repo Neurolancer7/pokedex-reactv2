@@ -98,7 +98,7 @@ export function PokemonCard({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-8 w-8 p-0 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={handleFavoriteClick}
               >
                 <Heart 
@@ -140,12 +140,12 @@ export function PokemonCard({
                 </span>
               </div>
             )}
-            <div className="w-24 h-24 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted rounded-full">
+            <div className="w-28 h-28 sm:w-24 sm:h-24 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted rounded-full">
               {pokemon.sprites.officialArtwork || pokemon.sprites.frontDefault ? (
                 <img
                   src={pokemon.sprites.officialArtwork || pokemon.sprites.frontDefault}
                   alt={pokemon.name}
-                  className="w-20 h-20 object-contain"
+                  className="w-24 h-24 sm:w-20 sm:h-20 object-contain"
                   loading="lazy"
                 />
               ) : (

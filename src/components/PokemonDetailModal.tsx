@@ -699,12 +699,12 @@ export function PokemonDetailModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className={`max-w-3xl max-h-[90vh] p-0 rounded-xl border-2 ${isMega ? "ring-2 ring-fuchsia-500/30 shadow-lg shadow-fuchsia-500/20" : ""}`}
+        className={`w-[95vw] sm:max-w-3xl max-h-[90vh] p-0 rounded-lg sm:rounded-xl border-2 ${isMega ? "ring-2 ring-fuchsia-500/30 shadow-lg shadow-fuchsia-500/20" : ""}`}
         // Add subtle themed border/glow using primary type color (only adds when not Mega)
         style={!isMega ? { borderColor: primaryTypeColor + "33", boxShadow: `0 10px 30px ${primaryTypeColor}22` } : undefined}
       >
         <ScrollArea className="max-h-[90vh]">
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {/* Header */}
             <DialogHeader className="flex flex-row items-center justify-between space-y-0 mb-6">
               <div className="flex items-center gap-3">
