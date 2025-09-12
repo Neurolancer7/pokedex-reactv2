@@ -191,6 +191,21 @@ export default function Pokedex() {
 
   const [selectedRegion, setSelectedRegion] = useState<string>("all");
 
+  // Add: strict National Dex ranges per region to ensure correct Pokémon set
+  const REGION_BOUNDS: Record<string, { min: number; max: number }> = {
+    all: { min: 1, max: 1025 },
+    kanto: { min: 1, max: 151 },
+    johto: { min: 152, max: 251 },
+    hoenn: { min: 252, max: 386 },
+    sinnoh: { min: 387, max: 493 },
+    unova: { min: 494, max: 649 },
+    kalos: { min: 650, max: 721 },
+    alola: { min: 722, max: 809 },
+    galar: { min: 810, max: 898 }, // include DLC beyond Calyrex in the regional dex fetch; still bound by 898 for National Dex
+    hisui: { min: 899, max: 905 },
+    paldea: { min: 906, max: 1010 },
+  };
+
   // Helper to build minimal Pokemon from species id + name
   function buildMinimalPokemon(id: number, name: string): Pokemon {
     const artwork = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
@@ -249,9 +264,15 @@ export default function Pokedex() {
         .map(([id, name]) => buildMinimalPokemon(id, name))
         .sort((a, b) => a.pokemonId - b.pokemonId);
 
-      setMasterList(list);
+      // Enforce strict National Dex bounds per region
+      const bounds = REGION_BOUNDS[regionKey] ?? REGION_BOUNDS["all"];
+      const bounded = list.filter(
+        (p) => p.pokemonId >= bounds.min && p.pokemonId <= bounds.max
+      );
+
+      setMasterList(bounded);
       setVisibleCount(PAGE_SIZE);
-      setHasMore(PAGE_SIZE < list.length);
+      setHasMore(PAGE_SIZE < bounded.length);
       toast.success(`Loaded ${region.label} Pokédex`);
     } catch (error) {
       console.error("Error loading region:", error);
