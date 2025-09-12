@@ -536,8 +536,8 @@ export default function Pokedex() {
         // Flatten base species + all form names, excluding any accidental mega/gmax (already excluded in fetchAlternateForms)
         const names: string[] = [];
         for (const row of forms) {
-          // Include base (default) form
-          if (row.speciesName) names.push(String(row.speciesName).toLowerCase());
+          // Use default variety pokemon name if it exists; avoid fetching non-existent /pokemon/{speciesName}
+          if (row.basePokemonName) names.push(String(row.basePokemonName).toLowerCase());
           for (const f of row.forms) {
             if (!f.formName) continue;
             const n = String(f.formName).toLowerCase();

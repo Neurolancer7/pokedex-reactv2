@@ -2,6 +2,8 @@ export interface FormInfo {
   speciesName: string;
   speciesId: number;
   forms: { formName: string; formId: number }[];
+  // Add: default variety pokemon name if it exists (used to avoid 404s for species without a direct /pokemon endpoint)
+  basePokemonName?: string;
 }
 
 const SPECIES_WITH_FORMS: string[] = [
@@ -93,8 +95,16 @@ export async function fetchAlternateForms(): Promise<FormInfo[]> {
         const speciesData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${speciesName}`);
         const speciesId: number = Number(speciesData?.id ?? 0);
 
-        // 2) Varieties reference pokemon entries
-        const varieties: Array<{ pokemon: { name: string, url: string } }> = Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
+        // Include is_default to capture the canonical pokemon entry name (if it maps to /pokemon/{name})
+        const varieties: Array<{ pokemon: { name: string, url: string }, is_default?: boolean }> =
+          Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
+
+        // Determine default variety pokemon name (e.g. "toxtricity-amped" rather than "toxtricity")
+        const defaultVariety = varieties.find((v) => v?.is_default);
+        const basePokemonName: string | undefined = defaultVariety?.pokemon?.name
+          ? String(defaultVariety.pokemon.name).toLowerCase()
+          : undefined;
+
         const formEntries: { formName: string; formId: number }[] = [];
         const formIdSet = new Set<number>();
 
@@ -141,6 +151,8 @@ export async function fetchAlternateForms(): Promise<FormInfo[]> {
             speciesName: normalizedSpeciesName,
             speciesId: speciesId,
             forms: formEntries.sort((a, b) => a.formId - b.formId),
+            // Add: pass along the default pokemon name if available
+            basePokemonName,
           });
         }
       } catch {
@@ -148,6 +160,7 @@ export async function fetchAlternateForms(): Promise<FormInfo[]> {
           speciesName: String(speciesName).toLowerCase(),
           speciesId: 0,
           forms: [],
+          basePokemonName: undefined,
         });
       }
     }
