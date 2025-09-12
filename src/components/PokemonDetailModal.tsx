@@ -268,9 +268,23 @@ export function PokemonDetailModal({
         const sprites = await Promise.all(
           names.map(async (nm) => {
             try {
-              const pr = await fetch(`${API}/pokemon/${nm}`);
-              if (!pr.ok) throw new Error("pokemon fail");
-              const pd = await pr.json();
+              // First try the direct pokemon endpoint
+              let pd: any | null = null;
+              let pr = await fetch(`${API}/pokemon/${nm}`);
+              if (!pr.ok) {
+                // Fallback: fetch species to find a default variety (handles cases like "toxtricity")
+                const sr = await fetch(`${API}/pokemon-species/${nm}`);
+                if (!sr.ok) throw new Error("species fail");
+                const sp = await sr.json();
+                const varieties: any[] = Array.isArray(sp?.varieties) ? sp.varieties : [];
+                const def = varieties.find((v: any) => Boolean(v?.is_default));
+                const varPokeUrl: string | undefined = def?.pokemon?.url || varieties[0]?.pokemon?.url;
+                if (!varPokeUrl) throw new Error("no variety");
+                pr = await fetch(varPokeUrl);
+                if (!pr.ok) throw new Error("pokemon from variety fail");
+              }
+              pd = await pr.json();
+
               const sprite: string | undefined =
                 pd?.sprites?.other?.["official-artwork"]?.front_default ||
                 pd?.sprites?.front_default ||
