@@ -14,6 +14,7 @@ interface PokemonGridProps {
   currentPage?: number;
   totalPages?: number;
   onPageChange?: (page: number) => void;
+  layoutVariant?: "default" | "alternate";
 }
 
 const containerVariants = {
@@ -40,7 +41,8 @@ export function PokemonGrid({
   isLoading = false,
   currentPage,
   totalPages,
-  onPageChange
+  onPageChange,
+  layoutVariant = "default",
 }: PokemonGridProps) {
   const [selectedPokemon, setSelectedPokemon] = useState<Pokemon | null>(null);
   const [liveMsg, setLiveMsg] = useState<string>("");
@@ -172,10 +174,21 @@ export function PokemonGrid({
     });
   };
 
+  // Add: compute classes for container and grid based on variant
+  const containerClass =
+    layoutVariant === "alternate"
+      ? "bg-card/70 border rounded-xl shadow-sm p-4 md:p-5 ring-1 ring-primary/10"
+      : "bg-card/60 border rounded-xl shadow-sm p-4 md:p-6";
+
+  const gridClass =
+    layoutVariant === "alternate"
+      ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4"
+      : "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5";
+
   if (isLoading) {
     return (
-      <div className="bg-card/60 border rounded-xl shadow-sm p-4 md:p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+      <div className={containerClass}>
+        <div className={gridClass}>
           {Array.from({ length: 20 }).map((_, i) => (
             <div key={i} className="animate-pulse">
               <div className="rounded-xl h-64 bg-gradient-to-br from-muted/70 to-muted border" />
@@ -204,12 +217,12 @@ export function PokemonGrid({
 
   return (
     <>
-      <div className="bg-card/60 border rounded-xl shadow-sm p-4 md:p-6">
+      <div className={containerClass}>
         <motion.div
           variants={containerVariants}
           initial="visible"
           animate="visible"
-          className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5"
+          className={gridClass}
         >
           {pokemon.map((poke, index) => (
             <motion.div

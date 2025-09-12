@@ -969,6 +969,7 @@ export default function Pokedex() {
                   ? altLoadingHook
                   : loadingMaster
               }
+              layoutVariant={selectedFormCategory === "alternate" ? "alternate" : "default"}
             />
           </motion.div>
 
@@ -1077,6 +1078,7 @@ export default function Pokedex() {
                   favorites={[]}
                   onFavoriteToggle={handleFavoriteToggle}
                   isLoading={altLoadingHook}
+                  layoutVariant="alternate"
                 />
                 {altHasMoreHook && (
                   <div className="mt-4 flex justify-center">
