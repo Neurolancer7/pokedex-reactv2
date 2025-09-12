@@ -529,6 +529,12 @@ export default function Pokedex() {
   const fetchPokemonData = useAction(api.pokemonData.fetchAndCachePokemon);
   const clearCache = useConvexMutation(api.pokemon.clearCache);
 
+  // Purge all regional dex cache entries (Kanto -> Paldea) on page load
+  useEffect(() => {
+    void clearCache({ scopes: ["regional"] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Theme management
   useEffect(() => {
     const root = document.documentElement;
@@ -966,47 +972,6 @@ export default function Pokedex() {
     });
   };
 
-  const handleClearCache = async () => {
-    try {
-      // Clear all caches except favorites
-      const promise = clearCache({});
-      toast.promise(promise, {
-        loading: "Clearing cached data…",
-        success: (res: any) => {
-          // Reset local lists and pagination
-          setItems([]);
-          setOffset(0);
-          setHasMore(true);
-          setIsLoadingMore(false);
-          setInfiniteEnabled(false);
-
-          // Also reset alternate/mega/gmax contexts
-          altQueueRef.current = null;
-          setAltList([]);
-          setAltHasMore(false);
-          setAltLoading(false);
-          setMegaList([]);
-          setMegaLoading(false);
-          setMegaVisibleCount(30);
-          setGmaxList([]);
-          setGmaxLoading(false);
-          setGmaxVisibleCount(30);
-
-          return `Cache cleared: ${
-            Object.entries((res as any)?.deleted || {})
-              .map(([k, v]) => `${k}=${v}`)
-              .join(", ") || "done"
-          }`;
-        },
-        error: (err) => (err instanceof Error ? err.message : "Failed to clear cache"),
-      });
-      await promise;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to clear cache";
-      toast.error(msg);
-    }
-  };
-
   return (
     <ErrorBoundary onRetry={handleDataRefresh}>
       <div className="min-h-screen bg-background">
@@ -1062,14 +1027,6 @@ export default function Pokedex() {
                   >
                     <RotateCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
                     <span className="hidden sm:inline">Update Data</span>
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleClearCache}
-                    aria-label="Clear cached Pokédex data"
-                  >
-                    Clear Cache
                   </Button>
                 </div>
               )}
