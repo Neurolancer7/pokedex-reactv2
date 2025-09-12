@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Heart, Ruler, Weight, Zap, Shield, Sword, Activity } from "lucide-react";
+import { X, Heart, Ruler, Weight, Zap, Shield, Sword, Activity, Sparkles } from "lucide-react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Dialog,
@@ -374,6 +374,13 @@ export function PokemonDetailModal({
     return undefined;
   })();
 
+  const isAlternateForm = (() => {
+    const n = String(data?.name ?? "").toLowerCase();
+    if (!n) return false;
+    if (isMega || isGmax) return false;
+    return n.includes("-");
+  })();
+
   const gmaxMove: string | undefined = (() => {
     if (!isGmax) return undefined;
     const lower = String(data?.name ?? "").toLowerCase();
@@ -579,14 +586,39 @@ export function PokemonDetailModal({
                   {/* Shiny toggle control (only shown if shiny exists) */}
                   {spriteShiny && (
                     <div className="mt-3 flex items-center justify-center gap-2">
-                      <Button
-                        variant={showShiny ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setShowShiny((s) => !s)}
-                        aria-pressed={showShiny}
-                      >
-                        {showShiny ? "Showing Shiny" : "Show Shiny"}
-                      </Button>
+                      {(() => {
+                        const baseClass = "transition-colors";
+                        const shinyClass = showShiny
+                          ? (isGmax
+                              ? "bg-purple-600/15 ring-2 ring-purple-500/40"
+                              : isMega
+                                ? "bg-fuchsia-600/15 ring-2 ring-fuchsia-500/40"
+                                : isAlternateForm
+                                  ? "bg-sky-600/10 ring-2 ring-sky-500/40"
+                                  : "")
+                          : (isGmax
+                              ? "hover:ring-1 hover:ring-purple-500/30"
+                              : isMega
+                                ? "hover:ring-1 hover:ring-fuchsia-500/30"
+                                : isAlternateForm
+                                  ? "hover:ring-1 hover:ring-sky-500/30"
+                                  : "");
+
+                        return (
+                          <Button
+                            variant={showShiny ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setShowShiny((s) => !s)}
+                            aria-pressed={showShiny}
+                            className={`${baseClass} ${shinyClass}`}
+                          >
+                            <Sparkles
+                              className={`h-4 w-4 mr-1 ${showShiny ? (isGmax ? "text-purple-500" : isMega ? "text-fuchsia-500" : isAlternateForm ? "text-sky-500" : "text-foreground") : "text-muted-foreground"}`}
+                            />
+                            {showShiny ? "Showing Shiny" : "Show Shiny"}
+                          </Button>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
