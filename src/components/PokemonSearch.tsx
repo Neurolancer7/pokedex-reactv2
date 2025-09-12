@@ -51,7 +51,11 @@ export function PokemonSearch({
 
   // Add: helper to clean region labels by removing number ranges in parentheses like (#-#)
   const cleanRegionLabel = (label: string) => {
-    return label.replace(/\(\s*#.*?\)/g, "").trim();
+    // Remove ranges like (#-#)
+    let s = label.replace(/\(\s*#.*?\)/g, "").trim();
+    // Remove any stray parentheses that may remain (e.g., trailing ")")
+    s = s.replace(/[()]/g, "").replace(/\s{2,}/g, " ").trim();
+    return s;
   };
 
   useEffect(() => {
