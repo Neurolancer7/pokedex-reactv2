@@ -101,7 +101,6 @@ export function PokemonDetailModal({
         officialArtwork: detail?.sprites?.other?.["official-artwork"]?.front_default ?? base.sprites?.officialArtwork,
       };
 
-      // Species normalization
       const pickEnglishFlavor = () => {
         const entries = Array.isArray(species?.flavor_text_entries) ? species.flavor_text_entries : [];
         const en = entries.find((e: any) => e?.language?.name === "en");
@@ -144,12 +143,77 @@ export function PokemonDetailModal({
 
     (async () => {
       try {
-        const [detail, species] = await Promise.all([
-          fetchJson(`https://pokeapi.co/api/v2/pokemon/${nameOrId}`),
-          fetchJson(`https://pokeapi.co/api/v2/pokemon-species/${nameOrId}`),
-        ]);
+        // Attempt to fetch full pokemon detail using name or id.
+        // If that fails (e.g., toxtricity-low-key, -gmax), resolve via pokemon-form -> pokemon.
+        let detail: any | null = null;
+        let species: any | null = null;
+
+        // Tracks the correct pokemon name to use for species lookup (base species for flavor/genus).
+        let pokemonNameForSpecies: string = nameOrId;
+
+        const API = (import.meta as any)?.env?.VITE_POKEAPI_URL || "https://pokeapi.co/api/v2";
+
+        const tryFetchPokemon = async (name: string) => {
+          return await fetchJson(`${API}/pokemon/${name}`);
+        };
+
+        const tryFetchPokemonById = async (id: number) => {
+          return await fetchJson(`${API}/pokemon/${id}`);
+        };
+
+        const tryFetchViaForm = async (formOrName: string) => {
+          const form = await fetchJson(`${API}/pokemon-form/${formOrName}`);
+          const pUrl: string = String(form?.pokemon?.url ?? "");
+          if (!pUrl) throw new Error("Missing linked pokemon url from form");
+          const poke = await fetchJson(pUrl);
+          // prefer the canonical pokemon name for species lookup
+          const linkedName: string = String(poke?.name ?? formOrName);
+          return { poke, linkedName };
+        };
+
+        const tryFetchSpecies = async (name: string) => {
+          try {
+            return await fetchJson(`${API}/pokemon-species/${name}`);
+          } catch {
+            // fallback: species by numeric id when available
+            const asNum = Number(name);
+            if (Number.isFinite(asNum) && asNum > 0) {
+              return await fetchJson(`${API}/pokemon-species/${asNum}`);
+            }
+            throw new Error("Species not found");
+          }
+        };
+
+        // 1) Try /pokemon/{nameOrId}
+        try {
+          detail = await tryFetchPokemon(nameOrId);
+          pokemonNameForSpecies = String(detail?.name ?? nameOrId);
+        } catch {
+          // 2) Try /pokemon-form/{nameOrId} -> linked /pokemon
+          try {
+            const { poke, linkedName } = await tryFetchViaForm(nameOrId);
+            detail = poke;
+            pokemonNameForSpecies = linkedName;
+          } catch {
+            // 3) Last resort: if we have an id, try /pokemon/{id}
+            const idNum = Number(pokemon.pokemonId);
+            if (Number.isFinite(idNum) && idNum > 0) {
+              detail = await tryFetchPokemonById(idNum);
+              pokemonNameForSpecies = String(detail?.name ?? pokemonNameForSpecies);
+            } else {
+              // Give up on detail; still try species for description/genus
+              detail = null;
+            }
+          }
+        }
+
+        // Species: prefer resolved pokemonNameForSpecies
+        species = await tryFetchSpecies(pokemonNameForSpecies);
+
         if (!mounted) return;
-        setEnhanced(normalize(pokemon, detail, species));
+
+        // If detail is still null, pass an empty object so normalize keeps base fields
+        setEnhanced(normalize(pokemon, detail ?? {}, species ?? {}));
       } catch {
         // Best-effort enhancement; ignore errors and keep base
       }
@@ -256,7 +320,7 @@ export function PokemonDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h[90vh] p-0">
+      <DialogContent className="max-w-2xl max-h-[90vh] p-0">
         <ScrollArea className="max-h-[90vh]">
           <div className="p-6">
             {/* Header */}
