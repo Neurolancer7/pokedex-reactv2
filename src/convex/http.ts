@@ -26,6 +26,23 @@ http.route({
     }
 
     try {
+      // NEW: Fetch official regional total from PokeAPI so UI paginates to the true end.
+      let expectedTotal: number | null = null;
+      try {
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 15000);
+        const res = await fetch(`https://pokeapi.co/api/v2/pokedex/${region}`, { signal: ctrl.signal });
+        clearTimeout(to);
+        if (res.ok) {
+          const data = await res.json();
+          const entries = Array.isArray(data?.pokemon_entries) ? data.pokemon_entries : [];
+          expectedTotal = entries.length;
+        }
+      } catch (e) {
+        // ignore; fallback to cached count later
+        expectedTotal = null;
+      }
+
       // Optional: purge cached region before rebuild
       if (reset) {
         try {
@@ -57,7 +74,14 @@ http.route({
 
       // Serve the requested page from cache
       const page = await ctx.runQuery(api.regionalDex.page, { region, limit, offset });
-      return new Response(JSON.stringify(page), {
+
+      // NEW: Force totalCount to the official expected total when available
+      const responseBody = {
+        ...page,
+        totalCount: typeof expectedTotal === "number" && expectedTotal > 0 ? expectedTotal : page.totalCount,
+      };
+
+      return new Response(JSON.stringify(responseBody), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
