@@ -325,9 +325,8 @@ export default function Pokedex() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      if (selectedRegion !== "all") {
+      if (selectedRegion !== "all" && selectedFormCategory !== "gigantamax") {
         setGmaxList([]);
-        setMegaList([]);
         return;
       }
       try {
@@ -349,7 +348,7 @@ export default function Pokedex() {
     return () => {
       cancelled = true;
     };
-  }, [selectedRegion]);
+  }, [selectedRegion, selectedFormCategory]);
 
   // Add: fetch Mega Evolutions when Region = All using pokemon-form listing
   async function fetchMegaForms(): Promise<Pokemon[]> {
@@ -468,7 +467,13 @@ export default function Pokedex() {
   }, [selectedRegion, selectedFormCategory]);
 
   // Client-side filtering for search and types; ignore form categories for the unified list
-  const filteredList = (selectedFormCategory === "mega" ? megaList : masterList).filter((p) => {
+  const filteredList = (
+    selectedFormCategory === "mega"
+      ? megaList
+      : selectedFormCategory === "gigantamax"
+        ? (gmaxList as unknown as Pokemon[])
+        : masterList
+  ).filter((p) => {
     const matchesSearch =
       !searchQuery ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -779,7 +784,13 @@ export default function Pokedex() {
               pokemon={displayPokemon as unknown as Pokemon[]}
               favorites={[]}
               onFavoriteToggle={handleFavoriteToggle}
-              isLoading={selectedFormCategory === "mega" ? megaLoading : loadingMaster}
+              isLoading={
+                selectedFormCategory === "mega"
+                  ? megaLoading
+                  : selectedFormCategory === "gigantamax"
+                    ? gmaxLoading
+                    : loadingMaster
+              }
             />
           </motion.div>
 
@@ -838,7 +849,7 @@ export default function Pokedex() {
           </div>
 
           {/* All Regions extras: Gigantamax, Mega, Alternate Forms */}
-          {selectedRegion === "all" && selectedFormCategory !== "mega" && (
+          {selectedRegion === "all" && !["mega", "gigantamax"].includes(selectedFormCategory || "") && (
             <div className="mt-12 space-y-10">
               {/* Gigantamax Section */}
               <section>
