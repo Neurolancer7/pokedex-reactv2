@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Filter, X } from "lucide-react";
+import { Search, Filter, X, Globe } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -236,11 +236,15 @@ export function PokemonSearch({
           <Select value={selectedRegion} onValueChange={onRegionChange}>
             <SelectTrigger
               className={cn(
-                "w-44 sm:w-52",
+                "w-44 sm:w-52 rounded-full gap-2 pl-2 pr-3 h-10 shadow-sm border-2",
+                "bg-gradient-to-br from-background to-muted/40",
+                "hover:bg-accent/50 transition-colors",
                 selectedRegion !== "all" &&
                   "border-primary/50 ring-2 ring-primary/30 bg-primary/5"
               )}
             >
+              {/* Leading icon for visual affordance */}
+              <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
               <SelectValue placeholder="Region" />
             </SelectTrigger>
             <SelectContent>
