@@ -10,6 +10,11 @@ import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { ExternalLink } from "lucide-react";
 
+function genderSpriteUrl(dexId: number, g: "male" | "female"): string {
+  const base = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon";
+  return g === "female" ? `${base}/female/${dexId}.png` : `${base}/${dexId}.png`;
+}
+
 type Props = {
   species?: string[];
 };
@@ -26,8 +31,7 @@ export function GenderDiffGrid({ species }: Props) {
   const [selected, setSelected] = useState<{ name: string; dexId: number } | null>(null);
   const [gender, setGender] = useState<"male" | "female">("male");
   const [imgKey, setImgKey] = useState(0); // forces img reload on toggle
-  const [bpLoading, setBpLoading] = useState(false);
-  const [bpError, setBpError] = useState<string | null>(null);
+  // streamlined: no client-side Bulbapedia probing; rely on server-side fetching and cache
   const [descLoading, setDescLoading] = useState(false);
   const [descError, setDescError] = useState<string | null>(null);
   const [descText, setDescText] = useState<string | null>(null);
@@ -70,53 +74,7 @@ export function GenderDiffGrid({ species }: Props) {
     };
   }, [sorted, infiniteEnabled, visibleCount]);
 
-  const bulbapediaUrl = (name: string) => {
-    const anchor = name.replace(/-/g, "_"); // closer to Bulbapedia's section ids
-    return `https://bulbapedia.bulbagarden.net/wiki/List_of_Pok%C3%A9mon_with_gender_differences#${encodeURIComponent(anchor)}`;
-  };
-
-  const genderSpriteUrl = (dexId: number, g: "male" | "female") => {
-    if (g === "female") {
-      return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/female/${dexId}.png`;
-    }
-    return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${dexId}.png`;
-  };
-
   const fetchGenderDiff = useAction(api.genderDiffActions.fetchGenderDifference);
-
-  const checkBulbapedia = async (name: string) => {
-    const url = bulbapediaUrl(name);
-    setBpLoading(true);
-    setBpError(null);
-    try {
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 8000);
-      // Attempt a simple GET. This may fail due to CORS, which we handle gracefully.
-      const res = await fetch(url, { method: "GET", signal: controller.signal });
-      clearTimeout(id);
-      // If we get a response but it's not ok, surface a concise error. Otherwise consider it reachable.
-      if (!res.ok) {
-        setBpError(`Bulbapedia responded with HTTP ${res.status}. You can still open the page directly.`);
-      }
-    } catch (e) {
-      // Network/CORS/Abort. Keep the link usable, just inform the user.
-      const msg = e instanceof Error ? e.message : "Unknown error";
-      setBpError(`Could not verify Bulbapedia (possibly blocked by CORS or network). You can still open the page. (${msg})`);
-    } finally {
-      setBpLoading(false);
-    }
-  };
-
-  // Note: Best-effort, non-blocking; link remains available.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (open && selected?.name) {
-      checkBulbapedia(selected.name);
-    } else {
-      setBpLoading(false);
-      setBpError(null);
-    }
-  }, [open, selected?.name]);
 
   // Load Bulbapedia gender differences (server-side scraped & cached)
   useEffect(() => {
