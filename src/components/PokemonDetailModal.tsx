@@ -316,6 +316,14 @@ export function PokemonDetailModal({
     return n.includes("mega");
   })();
 
+  const megaVariant: "X" | "Y" | undefined = (() => {
+    if (!isMega) return undefined;
+    const n = String(data?.name ?? "").toLowerCase();
+    if (n.endsWith("-mega-x")) return "X";
+    if (n.endsWith("-mega-y")) return "Y";
+    return undefined;
+  })();
+
   const gmaxMove: string | undefined = (() => {
     if (!isGmax) return undefined;
     const lower = String(data?.name ?? "").toLowerCase();
@@ -700,6 +708,14 @@ export function PokemonDetailModal({
                       <div>
                         <div className="text-muted-foreground">G-MAX Move</div>
                         <div className="font-medium">{gmaxMove}</div>
+                      </div>
+                    )}
+                    {isMega && (
+                      <div>
+                        <div className="text-muted-foreground">Form</div>
+                        <div className="font-medium">
+                          Mega Evolution{megaVariant ? ` (${megaVariant})` : ""}
+                        </div>
                       </div>
                     )}
                     {generationNumber && (
