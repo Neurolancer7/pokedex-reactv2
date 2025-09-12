@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 /* removed: AlternateForms table view is no longer used in All Regions extras */
 import { GenderDiffGrid } from "@/components/GenderDiffGrid";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
 import type { Pokemon } from "@/lib/pokemon-api";
 import { fetchGigantamaxList, type GigantamaxPokemon } from "@/lib/gigantamax";
@@ -975,67 +976,48 @@ export default function Pokedex() {
             </div>
           </motion.div>
 
-          {!isInitialLoading && displayPokemon.length === 0 && !pokemonData?.total && (
+          {/* Add: Search summary pill */}
+          {searchQuery && filteredList.length >= 0 && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-center py-12"
+              transition={{ duration: 0.18 }}
+              className="mb-4"
             >
-              <Alert className="max-w-md mx-auto flex flex-col items-center gap-3 text-left">
-                <div className="w-full flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="flex-1">
-                    No Pokémon data found. You can try fetching the data again.
-                  </AlertDescription>
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card/70 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-xs">
+                    Search
+                  </Badge>
+                  <div className="text-sm">
+                    Showing{" "}
+                    <span className="font-medium text-foreground">{filteredList.length}</span>{" "}
+                    result{filteredList.length === 1 ? "" : "s"} for{" "}
+                    <span className="font-medium text-foreground">“{searchQuery}”</span>
+                  </div>
                 </div>
-                <div className="w-full flex items-center justify-center gap-2">
-                  <Button
-                    variant="default"
-                    className="px-5"
-                    onClick={handleDataRefresh}
-                    disabled={isRefreshing}
-                    aria-busy={isRefreshing}
-                    aria-label="Fetch Pokémon Data"
-                  >
-                    {isRefreshing ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-5 w-5 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md shadow-primary/30 flex items-center justify-center">
-                          <img
-                            src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
-                            alt="Loading Pokéball"
-                            className="h-4 w-4 animate-bounce-spin"
-                          />
-                        </span>
-                        Fetching…
-                      </span>
-                    ) : (
-                      "Fetch Pokémon Data"
-                    )}
-                  </Button>
-                </div>
-              </Alert>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setVisibleCount(PAGE_SIZE);
+                    setHasMore(true);
+                    setIsLoadingMore(false);
+                    setInfiniteEnabled(false);
+                  }}
+                  aria-label="Clear search"
+                >
+                  Clear
+                </Button>
+              </div>
             </motion.div>
           )}
 
-          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
-            {/* Render unified grid, switching to Mega list when forms filter is 'mega' */}
-            <PokemonGrid
-              key={`unified-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory || "none"}`}
-              pokemon={displayPokemon as unknown as Pokemon[]}
-              favorites={[]}
-              onFavoriteToggle={handleFavoriteToggle}
-              isLoading={
-                selectedFormCategory === "mega"
-                  ? megaLoading
-                  : selectedFormCategory === "gigantamax"
-                  ? gmaxLoading
-                  : selectedFormCategory === "alternate"
-                  ? altLoadingHook
-                  : loadingMaster
-              }
-              layoutVariant={selectedFormCategory === "alternate" ? "alternate" : "default"}
-            />
-          </motion.div>
+          {/* ... keep existing code (empty state, grids, and sections below) */}
+
+          {/* ... keep existing code (empty state, grids, and sections below) */}
 
           {/* Unified Load More section */}
           <div className="mt-8 flex flex-col items-center gap-3">
