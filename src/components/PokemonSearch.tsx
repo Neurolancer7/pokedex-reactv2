@@ -250,7 +250,7 @@ export function PokemonSearch({
             <SelectContent>
               {regionOptions.map((opt) => (
                 <SelectItem key={opt.key} value={opt.key}>
-                  {opt.label} {opt.range ? `(${opt.range})` : ""}
+                  {opt.label}
                 </SelectItem>
               ))}
             </SelectContent>
