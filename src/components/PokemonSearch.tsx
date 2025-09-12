@@ -115,7 +115,6 @@ export function PokemonSearch({
   const hasActiveFilters = selectedTypes.length > 0 || selectedGeneration || selectedFormCategory;
 
   const FORM_OPTIONS: Array<{ value: string; label: string }> = [
-    { value: "regional", label: "Regional Forms" },
     { value: "alternate", label: "Alternate Forms" },
     { value: "mega", label: "Mega Evolutions" },
     { value: "gigantamax", label: "Gigantamax Forms" },
