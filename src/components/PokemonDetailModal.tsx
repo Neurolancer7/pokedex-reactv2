@@ -122,11 +122,13 @@ export function PokemonDetailModal({
           : [];
 
       const stats: Array<{ name: string; baseStat: number; effort: number }> = Array.isArray(detail?.stats)
-        ? detail.stats.map((s: any) => ({
-            name: String(s?.stat?.name ?? ""),
-            baseStat: Number(s?.base_stat ?? 0),
-            effort: Number(s?.effort ?? 0),
-          })).filter((s: any) => s.name)
+        ? detail.stats
+              .map((s: any) => ({
+                name: String(s?.stat?.name ?? ""),
+                baseStat: Number(s?.base_stat ?? 0),
+                effort: Number(s?.effort ?? 0),
+              }))
+              .filter((s: any) => s.name)
         : Array.isArray(base.stats)
           ? base.stats.map((s: any) => ({
               name: String(s?.name ?? ""),
@@ -185,10 +187,10 @@ export function PokemonDetailModal({
         baseExperience: typeof detail?.base_experience === "number" ? detail.base_experience : base.baseExperience,
         height: typeof detail?.height === "number" ? detail.height : base.height,
         weight: typeof detail?.weight === "number" ? detail.weight : base.weight,
-        types,
-        abilities,
-        stats,
-        sprites,
+        types: types,
+        abilities: abilities,
+        stats: stats,
+        sprites: sprites,
         species: speciesOut,
         generation: typeof base.generation === "number" ? base.generation : (parsedGen ?? base.generation),
       };
@@ -1194,32 +1196,13 @@ export function PokemonDetailModal({
                   </div>
                 )}
 
-                {/* Gender Differences Button */}
-                <div className="flex justify-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      const next = !genderPanelOpen;
-                      setGenderPanelOpen(next);
-                      if (next && !genderVariants && !gvLoading) {
-                        await loadGenderVariants();
-                      }
-                    }}
-                    aria-expanded={genderPanelOpen}
-                    className="mt-2"
-                  >
-                    View Gender Differences
-                  </Button>
-                </div>
-
                 {/* Gender Differences Panel */}
                 {genderPanelOpen && (
                   <div className="mt-3 p-3 rounded-lg border bg-gradient-to-br from-pink-500/5 to-purple-500/5">
                     {gvLoading && (
                       <div className="w-full flex items-center justify-center py-3" aria-busy="true" aria-live="polite">
-                        <div className="px-4 h-10 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow border border-white/10 flex items-center justify-center">
-                          <div className="h-8 w-8 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow flex items-center justify-center animate-pulse">
+                        <div className="px-4 h-10 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow border border-white/10 flex items-center justify-center animate-pulse">
+                          <div className="h-8 w-8 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow flex items-center justify-center">
                             <img
                               src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
                               alt="Loading Pokéball"
