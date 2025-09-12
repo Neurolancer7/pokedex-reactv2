@@ -43,6 +43,8 @@ function savePokemonCache() {
 }
 
 // Build a Pokemon from a pokemon-form name by following the linked pokemon url.
+// OPTIMIZED: Only fetch pokemon-form and parse linked pokemon id to build a minimal card.
+// Full details (types/abilities/stats) are fetched on-demand in the modal for speed.
 async function buildPokemonFromForm(
   apiBase: string,
   formName: string
@@ -62,38 +64,25 @@ async function buildPokemonFromForm(
     const pokemonUrl: string | undefined = formJson?.pokemon?.url;
     if (!pokemonUrl) throw new Error("Missing pokemon url on form");
 
-    // 2) fetch the pokemon JSON
-    const pJson = await fetch(pokemonUrl).then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status} @ ${pokemonUrl}`);
-      return r.json();
-    });
-
-    const id: number = Number(pJson?.id ?? 0);
-    const types: string[] = Array.isArray(pJson?.types)
-      ? pJson.types.map((t: any) => String(t?.type?.name ?? "")).filter(Boolean)
-      : [];
-
-    const abilities: string[] = Array.isArray(pJson?.abilities)
-      ? pJson.abilities.map((a: any) => String(a?.ability?.name ?? "")).filter(Boolean)
-      : [];
-
-    const height: number = typeof pJson?.height === "number" ? pJson.height : 0;
-    const weight: number = typeof pJson?.weight === "number" ? pJson.weight : 0;
+    // Parse numeric id directly from the linked pokemon URL (avoids a second fetch)
+    const idMatch = String(pokemonUrl).match(/\/pokemon\/(\d+)\/?$/);
+    const id = idMatch ? Number(idMatch[1]) : 0;
 
     const official =
-      pJson?.sprites?.other?.["official-artwork"]?.front_default ??
-      (id > 0
+      id > 0
         ? `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`
-        : undefined);
+        : undefined;
 
+    // Prefer form name for display (e.g., toxtricity-low-key)
     const out: Built = {
       pokemonId: id || 0,
-      name: String(pJson?.name ?? formName),
-      height,
-      weight,
+      name: String(formJson?.name ?? formName),
+      height: 0,
+      weight: 0,
       baseExperience: undefined,
-      types,
-      abilities: abilities.map((a) => ({ name: a, isHidden: false })),
+      // Leave types/abilities empty on grid for speed; modal enhances on demand
+      types: [],
+      abilities: [],
       stats: [],
       sprites: {
         frontDefault: undefined,
@@ -192,15 +181,15 @@ export function useAlternateForms() {
       const end = Math.min(queue.length, cursor + PAGE_SIZE);
       const slice = queue.slice(start, end);
 
-      // Throttled parallelism - increase concurrency, reduce stagger
-      const CONCURRENCY = 16; // was 8
+      // Throttled parallelism - increase concurrency modestly
+      const CONCURRENCY = 24; // increased from 16; still safe and faster due to single fetch per item now
       const out: Built[] = [];
       for (let i = 0; i < slice.length; i += CONCURRENCY) {
         const batch = slice.slice(i, i + CONCURRENCY);
         const results = await Promise.all(
           batch.map(async (q) => {
             // small stagger to avoid burst
-            await sleep(10); // was 40
+            await sleep(8);
             return await buildPokemonFromForm(API_BASE, q.formName);
           })
         );
