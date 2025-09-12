@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import { useQuery as useConvexQuery, useMutation as useConvexMutation, useAction } from "convex/react";
 import { useAuth } from "@/hooks/use-auth";
-import { useRegionalForms } from "@/lib/useRegionalForms";
 
 import { PokemonHeader } from "@/components/PokemonHeader";
 import { PokemonSearch } from "@/components/PokemonSearch";
@@ -492,12 +491,9 @@ export default function Pokedex() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFormCategory]);
 
-  // Regional forms hook (base + official regionals)
-  const { flatList: regionalFlatList, isLoading: regionalLoading } = useRegionalForms();
-
   const pokemonData = useConvexQuery(
     api.pokemon.list,
-    selectedFormCategory === "gender-diff" || selectedFormCategory === "regional"
+    selectedFormCategory === "gender-diff"
       ? "skip"
       : {
           limit: showFavorites ? 0 : BATCH_LIMIT,
@@ -511,7 +507,7 @@ export default function Pokedex() {
 
   const nextPokemonData = useConvexQuery(
     api.pokemon.list,
-    selectedFormCategory === "gender-diff" || selectedFormCategory === "regional"
+    selectedFormCategory === "gender-diff"
       ? "skip"
       : {
           limit: showFavorites ? 0 : BATCH_LIMIT,
@@ -784,9 +780,6 @@ export default function Pokedex() {
   // Enable auto infinite scroll only after first manual "Load More"
   const [infiniteEnabled, setInfiniteEnabled] = useState(false);
 
-  // Regional client-side visible count (since regional data is client-only)
-  const [regionalVisibleCount, setRegionalVisibleCount] = useState(30);
-
   // Infinite scroll: auto-load when near bottom (fallback button remains)
   useEffect(() => {
     const THRESHOLD_PX = 400;
@@ -807,16 +800,6 @@ export default function Pokedex() {
       );
       const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
       if (!nearBottom) return;
-
-      // Regional: client-side infinite after first manual load
-      if (selectedFormCategory === "regional") {
-        if (!infiniteEnabled) return;
-        const total = regionalFlatList.length;
-        if (regionalVisibleCount < total) {
-          setRegionalVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
-        }
-        return;
-      }
 
       // Alternate: infinite after first manual load
       if (selectedFormCategory === "alternate") {
@@ -882,15 +865,6 @@ export default function Pokedex() {
     isRefreshing,
     fetchPokemonData,
     infiniteEnabled,
-    regionalFlatList.length,
-    regionalVisibleCount,
-    altHasMore,
-    altLoading,
-    altList.length,
-    megaList.length,
-    megaVisibleCount,
-    gmaxList.length,
-    gmaxVisibleCount,
   ]);
 
   useEffect(() => {
@@ -899,15 +873,6 @@ export default function Pokedex() {
     setHasMore(true);
     setIsLoadingMore(false);
     setInfiniteEnabled(false); // require manual "Load More" again after any filter change
-    if (selectedFormCategory === "regional") {
-      setRegionalVisibleCount(30);
-    }
-    if (selectedFormCategory === "mega") {
-      setMegaVisibleCount(30);
-    }
-    if (selectedFormCategory === "gigantamax") {
-      setGmaxVisibleCount(30);
-    }
   }, [searchQuery, selectedGeneration, showFavorites, selectedTypes.join(","), selectedFormCategory || ""]);
 
   // Append new page results
@@ -946,7 +911,7 @@ export default function Pokedex() {
         : (selectedFormCategory === "gigantamax"
             ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, gmaxVisibleCount)
             : (selectedFormCategory === "regional"
-                ? [...regionalFlatList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, regionalVisibleCount)
+                ? []
                 : (() => {
                     // Default: list or favorites, enforce generation range if selected
                     const base = showFavorites ? (favorites || []) : items;
@@ -973,9 +938,7 @@ export default function Pokedex() {
           ? megaList.length === 0 && megaLoading
           : (selectedFormCategory === "gigantamax"
               ? gmaxList.length === 0 && gmaxLoading
-              : (selectedFormCategory === "regional"
-                  ? regionalLoading && (!showFavorites)
-                  : (!showFavorites && pokemonData === undefined && items.length === 0))));
+              : (!showFavorites && pokemonData === undefined && items.length === 0)));
 
   const totalItems = showFavorites ? (favorites?.length ?? 0) : (pokemonData?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalItems / INITIAL_LIMIT));
@@ -1249,47 +1212,6 @@ export default function Pokedex() {
                       onClick={() => {
                         const total = gmaxList.length;
                         setGmaxVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
-                        setInfiniteEnabled(true); // enable infinite after first manual load
-                      }}
-                      aria-label="Load more Pokémon"
-                    >
-                      Load More
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-          ) : selectedFormCategory === "regional" ? (
-            <div className="mt-8 flex flex-col items-center gap-3">
-              {regionalLoading ? (
-                <div
-                  className="w-full sm:w-auto flex items-center justify-center"
-                  aria-busy="true"
-                  aria-live="polite"
-                >
-                  <div className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg border border-white/10 flex items-center justify-center">
-                    <div className="h-9 w-9 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md shadow-primary/30 flex items-center justify-center animate-pulse">
-                      <img
-                        src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
-                        alt="Loading Pokéball"
-                        className="h-7 w-7 animate-bounce-spin drop-shadow"
-                      />
-                    </div>
-                    <span className="sr-only">Loading Regional forms…</span>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {regionalVisibleCount >= regionalFlatList.length && regionalFlatList.length > 0 && (
-                    <div className="text-muted-foreground text-sm">No more Pokémon</div>
-                  )}
-                  {regionalVisibleCount < regionalFlatList.length && (
-                    <Button
-                      variant="default"
-                      className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                      onClick={() => {
-                        const total = regionalFlatList.length;
-                        setRegionalVisibleCount((c) => Math.min(c + BATCH_LIMIT, total));
                         setInfiniteEnabled(true); // enable infinite after first manual load
                       }}
                       aria-label="Load more Pokémon"
