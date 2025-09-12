@@ -128,6 +128,24 @@ const schema = defineSchema(
       .index("by_isCosmetic", ["isCosmetic"])
       .index("by_isAlternate", ["isAlternate"]),
 
+    // Add: Cache table for regional Pokédex entries
+    regionalDex: defineTable({
+      region: v.string(), // canonical region id: kanto, johto, ...
+      dexId: v.number(),  // national dex id
+      name: v.string(),   // species base name
+      types: v.array(v.string()),
+      sprite: v.optional(v.string()),
+      forms: v.array(
+        v.object({
+          formName: v.string(),
+          formId: v.optional(v.number()),
+          types: v.array(v.string()),
+          sprite: v.optional(v.string()),
+        }),
+      ),
+    })
+      .index("by_region_and_dexId", ["region", "dexId"]),
+
     // Add: Cache for gender-difference descriptions sourced from Bulbapedia
     genderDifferences: defineTable({
       pokemonId: v.number(),

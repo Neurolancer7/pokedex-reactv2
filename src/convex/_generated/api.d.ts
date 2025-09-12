@@ -23,6 +23,8 @@ import type * as http from "../http.js";
 import type * as pokemon from "../pokemon.js";
 import type * as pokemonData from "../pokemonData.js";
 import type * as pokemonInternal from "../pokemonInternal.js";
+import type * as regionalDex from "../regionalDex.js";
+import type * as regionalDexActions from "../regionalDexActions.js";
 import type * as users from "../users.js";
 import type * as usersActions from "../usersActions.js";
 
@@ -45,6 +47,8 @@ declare const fullApi: ApiFromModules<{
   pokemon: typeof pokemon;
   pokemonData: typeof pokemonData;
   pokemonInternal: typeof pokemonInternal;
+  regionalDex: typeof regionalDex;
+  regionalDexActions: typeof regionalDexActions;
   users: typeof users;
   usersActions: typeof usersActions;
 }>;
