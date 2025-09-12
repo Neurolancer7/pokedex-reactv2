@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RotateCw } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { ExternalLink } from "lucide-react";
@@ -27,6 +27,20 @@ export function GenderDiffGrid({ species }: Props) {
     return Array.isArray(data) ? [...data].sort((a, b) => a.dexId - b.dexId) : data;
   }, [data]);
 
+  // De-duplicate by compound key to prevent duplicate React keys
+  const uniqueSorted = useMemo(() => {
+    if (!Array.isArray(sorted)) return sorted;
+    const seen = new Set<string>();
+    const out: typeof sorted = [];
+    for (const p of sorted) {
+      const key = `${p.dexId}-${p.name.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(p);
+    }
+    return out;
+  }, [sorted]);
+
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<{ name: string; dexId: number } | null>(null);
   const [gender, setGender] = useState<"male" | "female">("male");
@@ -47,7 +61,7 @@ export function GenderDiffGrid({ species }: Props) {
   useEffect(() => {
     const THRESHOLD_PX = 400;
     const onScroll = () => {
-      if (!Array.isArray(sorted) || sorted.length === 0) return;
+      if (!Array.isArray(uniqueSorted) || uniqueSorted.length === 0) return;
       if (!infiniteEnabled) return;
 
       const scrollY = window.scrollY || window.pageYOffset;
@@ -63,8 +77,8 @@ export function GenderDiffGrid({ species }: Props) {
       const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
       if (!nearBottom) return;
 
-      if (visibleCount < sorted.length) {
-        setVisibleCount((c) => Math.min(c + 30, sorted.length));
+      if (visibleCount < uniqueSorted.length) {
+        setVisibleCount((c) => Math.min(c + 30, uniqueSorted.length));
       }
     };
 
@@ -72,7 +86,7 @@ export function GenderDiffGrid({ species }: Props) {
     return () => {
       window.removeEventListener("scroll", onScroll);
     };
-  }, [sorted, infiniteEnabled, visibleCount]);
+  }, [uniqueSorted, infiniteEnabled, visibleCount]);
 
   const fetchGenderDiff = useAction(api.genderDiffActions.fetchGenderDifference);
 
@@ -143,10 +157,10 @@ export function GenderDiffGrid({ species }: Props) {
       )}
 
       {/* Grid */}
-      {Array.isArray(sorted) && sorted.length > 0 && (
+      {Array.isArray(uniqueSorted) && uniqueSorted.length > 0 && (
         <>
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {sorted.slice(0, visibleCount).map((p) => (
+            {uniqueSorted.slice(0, visibleCount).map((p) => (
               <Card
                 key={`${p.dexId}-${p.name}`}
                 className="overflow-hidden border-2 hover:border-primary/50 transition-colors cursor-pointer"
@@ -212,15 +226,15 @@ export function GenderDiffGrid({ species }: Props) {
 
           {/* Pagination controls */}
           <div className="mt-8 flex flex-col items-center gap-3">
-            {visibleCount >= sorted.length && sorted.length > 0 && (
+            {visibleCount >= uniqueSorted.length && uniqueSorted.length > 0 && (
               <div className="text-muted-foreground text-sm">No more Pokémon</div>
             )}
-            {visibleCount < sorted.length && (
+            {visibleCount < uniqueSorted.length && (
               <Button
                 variant="default"
                 className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                 onClick={() => {
-                  setVisibleCount((c) => Math.min(c + 30, sorted.length));
+                  setVisibleCount((c) => Math.min(c + 30, uniqueSorted.length));
                   setInfiniteEnabled(true);
                 }}
                 aria-label="Load more Pokémon"
@@ -240,6 +254,9 @@ export function GenderDiffGrid({ species }: Props) {
               <DialogTitle className="text-xl font-bold capitalize">
                 {selected?.name?.replace("-", " ")}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                View gender-specific sprite and description differences.
+              </DialogDescription>
             </DialogHeader>
 
             {/* Gender toggle */}
