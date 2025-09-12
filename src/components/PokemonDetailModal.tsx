@@ -398,7 +398,7 @@ export function PokemonDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] p-0">
+      <DialogContent className={`max-w-2xl max-h-[90vh] p-0 ${isMega ? "ring-2 ring-fuchsia-500/30 shadow-lg shadow-fuchsia-500/20" : ""}`}>
         <ScrollArea className="max-h-[90vh]">
           <div className="p-6">
             {/* Header */}
@@ -473,7 +473,9 @@ export function PokemonDetailModal({
                     className={`w-full aspect-square rounded-lg flex items-center justify-center
                       ${isGmax
                         ? "bg-gradient-to-br from-purple-600/15 via-fuchsia-500/10 to-purple-700/15 ring-2 ring-purple-500/30 shadow-lg shadow-purple-500/20"
-                        : "bg-gradient-to-br from-muted/50 to-muted"}
+                        : isMega
+                          ? "bg-gradient-to-br from-fuchsia-600/15 via-pink-500/10 to-fuchsia-700/15 ring-2 ring-fuchsia-500/30 shadow-lg shadow-fuchsia-500/20"
+                          : "bg-gradient-to-br from-muted/50 to-muted"}
                     `}
                   >
                     {currentSprite ? (
@@ -501,6 +503,23 @@ export function PokemonDetailModal({
                         <img
                           src="https://harmless-tapir-303.convex.cloud/api/storage/63c94427-b9f7-4312-b254-b148bf2b227e"
                           alt="Gigantamax"
+                          className="h-6 w-6 object-contain drop-shadow"
+                        />
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Mega badge */}
+                  {isMega && (
+                    <div className="absolute -top-2 -right-2">
+                      <span
+                        title="Mega Evolution"
+                        aria-label="Mega Evolution"
+                        className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-fuchsia-500/40"
+                      >
+                        <img
+                          src="https://harmless-tapir-303.convex.cloud/api/storage/5bccd8f0-8ff6-48ea-9149-b26759dfe4d5"
+                          alt="Mega Evolution"
                           className="h-6 w-6 object-contain drop-shadow"
                         />
                       </span>
