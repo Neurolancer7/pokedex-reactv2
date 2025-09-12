@@ -444,7 +444,8 @@ export default function Pokedex() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      if (selectedRegion !== "all") {
+      // Fetch megas if either "All" region is active OR forms filter is set to "mega"
+      if (selectedRegion !== "all" && selectedFormCategory !== "mega") {
         setMegaList([]);
         return;
       }
@@ -464,10 +465,10 @@ export default function Pokedex() {
     return () => {
       cancelled = true;
     };
-  }, [selectedRegion]);
+  }, [selectedRegion, selectedFormCategory]);
 
   // Client-side filtering for search and types; ignore form categories for the unified list
-  const filteredList = masterList.filter((p) => {
+  const filteredList = (selectedFormCategory === "mega" ? megaList : masterList).filter((p) => {
     const matchesSearch =
       !searchQuery ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -485,6 +486,14 @@ export default function Pokedex() {
     setIsLoadingMore(false);
     setInfiniteEnabled(false);
   }, [searchQuery, selectedTypes.join(",") /* ignore forms filter intentionally */]);
+
+  // Also reset paging when switching to/from Mega filter to simplify UX
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+    setHasMore(true);
+    setIsLoadingMore(false);
+    setInfiniteEnabled(false);
+  }, [selectedFormCategory]);
 
   // Derive display items
   const displayPokemon = filteredList.slice(0, visibleCount);
@@ -764,13 +773,13 @@ export default function Pokedex() {
           )}
 
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
-            {/* Always render the unified grid */}
+            {/* Render unified grid, switching to Mega list when forms filter is 'mega' */}
             <PokemonGrid
-              key={`unified-${selectedTypes.join(",")}-${searchQuery}`}
+              key={`unified-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory || "none"}`}
               pokemon={displayPokemon as unknown as Pokemon[]}
               favorites={[]}
               onFavoriteToggle={handleFavoriteToggle}
-              isLoading={loadingMaster}
+              isLoading={selectedFormCategory === "mega" ? megaLoading : loadingMaster}
             />
           </motion.div>
 
@@ -815,7 +824,7 @@ export default function Pokedex() {
                           setInfiniteEnabled(true); // enable infinite after first manual load
                         }, 0);
                       }}
-                      disabled={isLoadingMore || loadingMaster}
+                      disabled={isLoadingMore || (selectedFormCategory === "mega" ? megaLoading : loadingMaster)}
                       aria-busy={isLoadingMore}
                       aria-live="polite"
                       aria-label="Load more Pokémon"
