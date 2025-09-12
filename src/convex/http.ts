@@ -24,14 +24,29 @@ http.route({
     }
 
     try {
-      // Best-effort ensure cache; do not fail request if it throws
+      // Check current cache count
+      let count = 0;
       try {
-        await ctx.runAction(internal.regionalDexActions.ensureRegion, { region });
+        count = await ctx.runQuery(internal.regionalDex.countByRegion, { region });
       } catch (e) {
-        // ignore background ensure failure; proceed to serve what we have
-        console.error("ensureRegion error:", e);
+        // ignore count errors, proceed to try building
+        console.error("countByRegion error:", e);
       }
 
+      // If first page and cache is empty, build synchronously to guarantee completeness
+      if (offset === 0 && count === 0) {
+        await ctx.runAction(internal.regionalDexActions.ensureRegion, { region });
+      } else {
+        // Otherwise, best effort background ensure to backfill missing entries
+        try {
+          await ctx.runAction(internal.regionalDexActions.ensureRegion, { region });
+        } catch (e) {
+          // ignore background ensure failure; proceed to serve what we have
+          console.error("ensureRegion (background) error:", e);
+        }
+      }
+
+      // Serve the requested page from cache
       const page = await ctx.runQuery(api.regionalDex.page, { region, limit, offset });
       return new Response(JSON.stringify(page), {
         status: 200,
