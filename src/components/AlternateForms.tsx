@@ -190,7 +190,7 @@ export function AlternateForms() {
             </TableHeader>
             <TableBody>
               {filtered.map((row) => (
-                <TableRow key={row.speciesName}>
+                <TableRow key={`${row.speciesId !== undefined && row.speciesId !== null ? row.speciesId : "unknown"}-${row.speciesName}`}>
                   <TableCell className="capitalize">{row.speciesName}</TableCell>
                   <TableCell>{row.speciesId || "—"}</TableCell>
                   <TableCell className="text-muted-foreground">

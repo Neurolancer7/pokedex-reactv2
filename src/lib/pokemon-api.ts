@@ -156,3 +156,106 @@ export function normalizePokemonName(name: string): string {
 
   return cleaned;
 }
+
+// Lightweight retry with exponential backoff
+async function retryFetch(url: string, init: RequestInit | undefined, attempts = 3, baseDelayMs = 300): Promise<Response> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const ctrl = new AbortController();
+      const id = setTimeout(() => ctrl.abort(), 15000);
+      const res = await fetch(url, { ...init, signal: ctrl.signal });
+      clearTimeout(id);
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) {
+        const delay = baseDelayMs * Math.pow(2, i);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(`Failed to fetch ${url}`);
+}
+
+// In-memory caches to avoid overfetching and to dedupe in-flight requests
+const resolvedSlugCache: Map<string, string> = new Map();
+
+type FetchPokemonResult = { ok: true; data: any } | { ok: false; status?: number; message?: string };
+const pendingPokemonRequests: Map<string, Promise<FetchPokemonResult>> = new Map();
+
+// Optional special slugs for species that require a specific default form
+const SPECIAL_SLUG_MAP: Record<string, string> = {
+  toxtricity: "toxtricity-amped",
+};
+
+/**
+ * Fetch a Pokémon by base name with fallback:
+ * 1) Try direct /pokemon/{candidateSlug}
+ * 2) On 404, load /pokemon-species/{base} → find default variety → fetch that pokemon slug
+ * Caches resolved slugs and dedupes in-flight requests.
+ */
+export async function fetchPokemonWithFallback(baseName: string): Promise<{ ok: true; data: any } | { ok: false; status?: number; message?: string }> {
+  const base = normalizePokemonName(baseName);
+  const candidate = SPECIAL_SLUG_MAP[base] || base;
+
+  if (resolvedSlugCache.has(candidate)) {
+    const slug = resolvedSlugCache.get(candidate)!;
+    try {
+      const res = await retryFetch(`https://pokeapi.co/api/v2/pokemon/${slug}`, undefined, 2, 300);
+      if (!res.ok) return { ok: false, status: res.status, message: `HTTP ${res.status}` };
+      const data = await res.json();
+      return { ok: true, data };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : "Network error" };
+    }
+  }
+
+  if (pendingPokemonRequests.has(candidate)) {
+    return pendingPokemonRequests.get(candidate)!;
+  }
+
+  const p: Promise<FetchPokemonResult> = (async () => {
+    try {
+      // Try direct slug first
+      const direct = await retryFetch(`https://pokeapi.co/api/v2/pokemon/${candidate}`, undefined, 2, 300);
+      if (direct.ok) {
+        const data = await direct.json();
+        resolvedSlugCache.set(candidate, data.name);
+        return { ok: true, data } as const;
+      }
+
+      if (direct.status !== 404) {
+        return { ok: false, status: direct.status, message: `HTTP ${direct.status}` } as const;
+      }
+
+      // Fallback via species varieties
+      const speciesRes = await retryFetch(`https://pokeapi.co/api/v2/pokemon-species/${base}`, undefined, 2, 300);
+      if (!speciesRes.ok) {
+        return { ok: false, status: speciesRes.status, message: `Species HTTP ${speciesRes.status}` } as const;
+      }
+      const species = await speciesRes.json();
+      const varieties: Array<{ is_default: boolean; pokemon: { name: string; url: string } }> = Array.isArray(species?.varieties) ? species.varieties : [];
+      const def = varieties.find((v) => v.is_default) || varieties[0];
+      if (!def) {
+        return { ok: false, status: 404, message: "No varieties found" } as const;
+      }
+      const slug = def.pokemon.name;
+      const slugRes = await retryFetch(`https://pokeapi.co/api/v2/pokemon/${slug}`, undefined, 2, 300);
+      if (!slugRes.ok) {
+        return { ok: false, status: slugRes.status, message: `Slug HTTP ${slugRes.status}` } as const;
+      }
+      const data = await slugRes.json();
+      resolvedSlugCache.set(candidate, slug);
+      return { ok: true, data } as const;
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : "Unknown error" } as const;
+    } finally {
+      pendingPokemonRequests.delete(candidate);
+    }
+  })();
+
+  pendingPokemonRequests.set(candidate, p);
+  return p;
+}
