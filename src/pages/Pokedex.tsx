@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlternateForms } from "@/components/AlternateForms";
 import { GenderDiffGrid } from "@/components/GenderDiffGrid";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import type { Pokemon } from "@/lib/pokemon-api";
 import { fetchGigantamaxList, type GigantamaxPokemon } from "@/lib/gigantamax";
@@ -76,6 +77,24 @@ class ErrorBoundary extends React.Component<{ onRetry: () => void; children: Rea
   }
 }
 
+async function fetchJsonWithRetry<T>(url: string, attempts = 4, baseDelayMs = 300): Promise<T> {
+  let lastErr: unknown;
+  const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return (await res.json()) as T;
+    } catch (err) {
+      lastErr = err;
+      if (i === attempts - 1) break;
+      const jitter = Math.floor(Math.random() * 150);
+      await sleep(baseDelayMs * Math.pow(2, i) + jitter);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("Failed to fetch JSON");
+}
+
 export default function Pokedex() {
   const { isAuthenticated } = useAuth();
   // Disable all data I/O across the page
@@ -135,170 +154,129 @@ export default function Pokedex() {
   const altQueueRef = useRef<string[] | null>(null);
   const [altLoading, setAltLoading] = useState(false);
 
-  // Small helpers (scoped here to avoid leaking across app)
-  async function delay(ms: number) {
-    return new Promise((res) => setTimeout(res, ms));
-  }
-  async function fetchJsonWithRetry<T>(url: string, attempts = 3, baseDelayMs = 150): Promise<T> {
-    let lastErr: unknown;
-    for (let i = 0; i < attempts; i++) {
-      try {
-        const ctrl = new AbortController();
-        const id = setTimeout(() => ctrl.abort(), 15000);
-        const res = await fetch(url, { signal: ctrl.signal });
-        clearTimeout(id);
-        if (!res.ok) {
-          if ((res.status >= 500 || res.status === 429) && i < attempts - 1) {
-            await delay(baseDelayMs * Math.pow(2, i));
-            continue;
-          }
-          throw new Error(`HTTP ${res.status} for ${url}`);
-        }
-        return (await res.json()) as T;
-      } catch (err) {
-        lastErr = err;
-        if (i < attempts - 1) {
-          await delay(baseDelayMs * Math.pow(2, i));
-          continue;
-        }
-      }
-    }
-    throw lastErr instanceof Error ? lastErr : new Error("Failed to fetch");
-  }
+  // Regions mapping: label, display range, and pokedex slugs to aggregate
+  const REGION_OPTIONS: Array<{
+    key: string;
+    label: string;
+    range: string;
+    slugs: string[];
+  }> = [
+    { key: "kanto", label: "Kanto", range: "#001–#151", slugs: ["kanto"] },
+    { key: "johto", label: "Johto", range: "#152–#251", slugs: ["original-johto"] },
+    { key: "hoenn", label: "Hoenn", range: "#252–#386", slugs: ["hoenn"] },
+    { key: "sinnoh", label: "Sinnoh", range: "#387–#493", slugs: ["original-sinnoh"] },
+    { key: "unova", label: "Unova", range: "#494–#649", slugs: ["original-unova"] },
+    {
+      key: "kalos",
+      label: "Kalos",
+      range: "#650–#721",
+      slugs: ["kalos-central", "kalos-coastal", "kalos-mountain"],
+    },
+    {
+      key: "alola",
+      label: "Alola",
+      range: "#722–#809",
+      slugs: ["updated-alola"], // includes USUM updates
+    },
+    {
+      key: "galar",
+      label: "Galar",
+      range: "#810–#898 (+DLC)",
+      slugs: ["galar", "isle-of-armor", "crown-tundra"],
+    },
+    { key: "hisui", label: "Hisui", range: "#899–#905", slugs: ["hisui"] },
+    { key: "paldea", label: "Paldea", range: "#906–#1010", slugs: ["paldea"] },
+  ];
 
-  // Add: Transform raw PokeAPI pokemon into our Pokemon interface
-  function buildPokemonFromEntry(p: any): Pokemon {
-    const sprites = p?.sprites ?? {};
-    const other = sprites?.other ?? {};
-    const official =
-      other?.["official-artwork"]?.front_default ??
-      other?.dream_world?.front_default ??
-      sprites?.front_default ??
-      undefined;
+  const [selectedRegion, setSelectedRegion] = useState<string>("kanto");
 
-    const types: string[] = Array.isArray(p?.types)
-      ? p.types.map((t: any) => String(t?.type?.name || "")).filter(Boolean)
-      : [];
-
-    const abilities: Array<{ name: string; isHidden: boolean }> = Array.isArray(p?.abilities)
-      ? p.abilities.map((a: any) => ({
-          name: String(a?.ability?.name || ""),
-          isHidden: Boolean(a?.is_hidden),
-        }))
-      : [];
-
-    const stats: Array<{ name: string; baseStat: number; effort: number }> = Array.isArray(p?.stats)
-      ? p.stats.map((s: any) => ({
-          name: String(s?.stat?.name || ""),
-          baseStat: Number(s?.base_stat || 0),
-          effort: Number(s?.effort || 0),
-        }))
-      : [];
-
-    const moves: string[] = Array.isArray(p?.moves)
-      ? p.moves.map((m: any) => String(m?.move?.name || "")).filter(Boolean)
-      : [];
-
-    const pokemon: Pokemon = {
-      pokemonId: Number(p?.id || 0),
-      name: String(p?.name || ""),
-      height: Number(p?.height || 0),
-      weight: Number(p?.weight || 0),
-      baseExperience: p?.base_experience ?? undefined,
-      types,
-      abilities,
-      stats,
+  // Helper to build minimal Pokemon from species id + name
+  function buildMinimalPokemon(id: number, name: string): Pokemon {
+    const artwork = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
+    return {
+      pokemonId: id,
+      name,
+      height: 0,
+      weight: 0,
+      baseExperience: undefined,
+      types: [],
+      abilities: [],
+      stats: [],
       sprites: {
-        frontDefault: sprites?.front_default || undefined,
-        frontShiny: sprites?.front_shiny || undefined,
-        officialArtwork: official || undefined,
+        frontDefault: undefined,
+        frontShiny: undefined,
+        officialArtwork: artwork,
       },
-      moves,
-      generation: 0, // not used in UI here
+      moves: [],
+      generation: 0,
       species: undefined,
     };
-
-    return pokemon;
   }
+
+  // Fetch region pokedex and populate masterList
+  const fetchRegionPokemon = async (regionKey: string) => {
+    try {
+      setLoadingMaster(true);
+      setMasterError(null);
+
+      const region = REGION_OPTIONS.find((r) => r.key === regionKey);
+      if (!region) throw new Error("Unknown region");
+
+      // Fetch all slugs for this region (handle sub-dex merges)
+      const results = await Promise.all(
+        region.slugs.map((slug) =>
+          fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokedex/${slug}`)
+        )
+      );
+
+      // Aggregate pokemon_entries -> species id + name
+      const map: Map<number, string> = new Map();
+      for (const r of results) {
+        const entries: any[] = Array.isArray(r?.pokemon_entries) ? r.pokemon_entries : [];
+        for (const e of entries) {
+          const name: string = String(e?.pokemon_species?.name ?? "").trim();
+          const url: string = String(e?.pokemon_species?.url ?? "");
+          const idMatch = url.match(/\/pokemon-species\/(\d+)\/?$/);
+          const id = idMatch ? Number(idMatch[1]) : NaN;
+          if (!name || !Number.isFinite(id)) continue;
+          if (!map.has(id)) map.set(id, name);
+        }
+      }
+
+      // Build minimal list, sort by national dex ascending
+      const list: Pokemon[] = Array.from(map.entries())
+        .map(([id, name]) => buildMinimalPokemon(id, name))
+        .sort((a, b) => a.pokemonId - b.pokemonId);
+
+      setMasterList(list);
+      setVisibleCount(PAGE_SIZE);
+      setHasMore(PAGE_SIZE < list.length);
+      toast.success(`Loaded ${region.label} Pokédex`);
+    } catch (error) {
+      console.error("Error loading region:", error);
+      const message = error instanceof Error ? error.message : "Failed to load region Pokédex";
+      setMasterError(message);
+      toast.error(message);
+      setMasterList([]);
+      setVisibleCount(PAGE_SIZE);
+      setHasMore(false);
+    } finally {
+      setIsRefreshing(false);
+      setLoadingMaster(false);
+    }
+  };
 
   // Fetch all Pokémon (including forms) directly from PokeAPI
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      try {
-        setLoadingMaster(true);
-        setMasterError(null);
-
-        // 1) List all pokemon (base + forms)
-        const list = await fetchJsonWithRetry<{ results: { name: string; url: string }[] }>(
-          `${API_BASE}/pokemon?limit=2000`
-        );
-        const names: string[] = Array.isArray(list?.results)
-          ? (list.results.map((r) => r?.name).filter(Boolean) as string[])
-          : [];
-
-        // 2) Concurrency-limited detail fetch
-        const limit = 24;
-        let idx = 0;
-        const out: Pokemon[] = [];
-        const workers: Array<Promise<void>> = [];
-
-        const worker = async () => {
-          while (idx < names.length) {
-            const i = idx++;
-            const name = names[i];
-            try {
-              const p = await fetchJsonWithRetry<any>(`${API_BASE}/pokemon/${name}`);
-              const built = buildPokemonFromEntry(p);
-
-              // derive parent national dex for sorting via species url (if available)
-              const speciesUrl = p?.species?.url as string | undefined;
-              const parentDex = Number(String(speciesUrl || "").match(/\/pokemon-species\/(\d+)\//)?.[1] || built.pokemonId);
-
-              (built as any).__parentDex = Number.isFinite(parentDex) ? parentDex : built.pokemonId;
-              out.push(built);
-            } catch {
-              // ignore broken entries
-            }
-          }
-        };
-
-        for (let k = 0; k < limit; k++) workers.push(worker());
-        await Promise.all(workers);
-
-        // 3) Sort strictly by parent national dex ascending, fallback to own id
-        out.sort((a: any, b: any) => {
-          const pa = Number(a?.__parentDex ?? a.pokemonId);
-          const pb = Number(b?.__parentDex ?? b.pokemonId);
-          if (pa !== pb) return pa - pb;
-          return a.pokemonId - b.pokemonId;
-        });
-
-        // Drop temp field and update state
-        const cleaned: Pokemon[] = out.map((p: any) => {
-          const { __parentDex, ...rest } = p;
-          return rest as Pokemon;
-        });
-
-        setMasterList(cleaned);
-        setVisibleCount(PAGE_SIZE);
-        toast.success("Pokémon data updated successfully!");
-      } catch (error) {
-        console.error("Error refreshing data:", error);
-        const message = error instanceof Error ? error.message : "Unexpected error while refreshing data";
-        setMasterError(message);
-        toast.error(message);
-      } finally {
-        setIsRefreshing(false);
-        setLoadingMaster(false);
-      }
+      await fetchRegionPokemon(selectedRegion);
     };
-
     run();
     return () => {
       cancelled = true;
     };
-  }, [API_BASE, PAGE_SIZE]);
+  }, [selectedRegion, PAGE_SIZE]);
 
   // Client-side filtering for search and types; ignore form categories for the unified list
   const filteredList = masterList.filter((p) => {
@@ -467,72 +445,22 @@ export default function Pokedex() {
   const handleDataRefresh = async () => {
     try {
       setIsRefreshing(true);
-      setLoadingMaster(true);
-      setMasterError(null);
-
-      // 1) List all pokemon (base + forms)
-      const list = await fetchJsonWithRetry<{ results: { name: string; url: string }[] }>(
-        `${API_BASE}/pokemon?limit=2000`
-      );
-      const names: string[] = Array.isArray(list?.results)
-        ? (list.results.map((r) => r?.name).filter(Boolean) as string[])
-        : [];
-
-      // 2) Concurrency-limited detail fetch
-      const limit = 24;
-      let idx = 0;
-      const out: Pokemon[] = [];
-      const workers: Array<Promise<void>> = [];
-
-      const worker = async () => {
-        while (idx < names.length) {
-          const i = idx++;
-          const name = names[i];
-          try {
-            const p = await fetchJsonWithRetry<any>(`${API_BASE}/pokemon/${name}`);
-            const built = buildPokemonFromEntry(p);
-
-            // derive parent national dex for sorting via species url (if available)
-            const speciesUrl = p?.species?.url as string | undefined;
-            const parentDex = Number(String(speciesUrl || "").match(/\/pokemon-species\/(\d+)\//)?.[1] || built.pokemonId);
-
-            (built as any).__parentDex = Number.isFinite(parentDex) ? parentDex : built.pokemonId;
-            out.push(built);
-          } catch {
-            // ignore broken entries
-          }
-        }
-      };
-
-      for (let k = 0; k < limit; k++) workers.push(worker());
-      await Promise.all(workers);
-
-      // 3) Sort strictly by parent national dex ascending, fallback to own id
-      out.sort((a: any, b: any) => {
-        const pa = Number(a?.__parentDex ?? a.pokemonId);
-        const pb = Number(b?.__parentDex ?? b.pokemonId);
-        if (pa !== pb) return pa - pb;
-        return a.pokemonId - b.pokemonId;
-      });
-
-      // Drop temp field and update state
-      const cleaned: Pokemon[] = out.map((p: any) => {
-        const { __parentDex, ...rest } = p;
-        return rest as Pokemon;
-      });
-
-      setMasterList(cleaned);
-      setVisibleCount(PAGE_SIZE);
-      toast.success("Pokémon data updated successfully!");
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-      const message = error instanceof Error ? error.message : "Unexpected error while refreshing data";
-      setMasterError(message);
-      toast.error(message);
+      await fetchRegionPokemon(selectedRegion);
     } finally {
       setIsRefreshing(false);
-      setLoadingMaster(false);
     }
+  };
+
+  // When switching regions: reset UI and scroll to top smoothly
+  const handleRegionChange = (value: string) => {
+    setSelectedRegion(value);
+    setSearchQuery("");
+    setSelectedTypes([]);
+    setVisibleCount(PAGE_SIZE);
+    setHasMore(true);
+    setIsLoadingMore(false);
+    setInfiniteEnabled(false);
+    setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
   };
 
   // Right before return: define a simple initial loading flag for the empty state
@@ -572,11 +500,26 @@ export default function Pokedex() {
             transition={{ delay: 0.2 }}
             className="mb-6"
           >
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3">
                 <h2 className="text-2xl font-bold tracking-tight">
                   {showFavorites ? "Your Favorites" : "Pokémon"}
                 </h2>
+                {/* Region pill */}
+                <div className="min-w-[180px]">
+                  <Select value={selectedRegion} onValueChange={handleRegionChange}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Region" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REGION_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.key} value={opt.key}>
+                          {opt.label} {opt.range ? `(${opt.range})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {!showFavorites && (
