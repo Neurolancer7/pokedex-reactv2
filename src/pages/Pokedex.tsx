@@ -118,24 +118,38 @@ function gmaxToPokemon(g: GigantamaxPokemon): Pokemon {
 }
 
 async function buildPokemonFromFormName(fetcher: <T>(u: string) => Promise<T>, fname: string) {
-  // Prefer: fetch via pokemon-form first, then fallback to pokemon endpoint to avoid 404s for form-only names
+  // Add: resolve via pokemon endpoint first, then fallback to pokemon-form -> pokemon, then species default variety
+  const tryFetchPokemon = async (name: string): Promise<any> => {
+    return await fetcher<any>(`https://pokeapi.co/api/v2/pokemon/${name}`);
+  };
   const tryFetchViaForm = async (formName: string): Promise<any> => {
     const formJson = await fetcher<any>(`https://pokeapi.co/api/v2/pokemon-form/${formName}`);
     const pUrl: string = String(formJson?.pokemon?.url ?? "");
     if (!pUrl) throw new Error("Missing pokemon url from form");
     return await fetcher<any>(pUrl);
   };
-  const tryFetchPokemon = async (name: string): Promise<any> => {
-    return await fetcher<any>(`https://pokeapi.co/api/v2/pokemon/${name}`);
+  // New: resolve base through species -> default variety -> pokemon
+  const tryFetchViaSpecies = async (nameOrSpecies: string): Promise<any> => {
+    const speciesJson = await fetcher<any>(`https://pokeapi.co/api/v2/pokemon-species/${nameOrSpecies}`);
+    const varieties: Array<{ is_default?: boolean; pokemon?: { name?: string; url?: string } }> =
+      Array.isArray(speciesJson?.varieties) ? speciesJson.varieties : [];
+    // Prefer default variety
+    const def = varieties.find(v => v?.is_default);
+    const targetUrl = String(def?.pokemon?.url || varieties[0]?.pokemon?.url || "");
+    if (!targetUrl) throw new Error("No variety pokemon url found");
+    return await fetcher<any>(targetUrl);
   };
 
   let pokemonJson: any = null;
   try {
-    // First try via pokemon-form; many alternates don't exist at /pokemon/{name}
-    pokemonJson = await tryFetchViaForm(fname);
-  } catch {
-    // Fallback to direct pokemon endpoint for base/default names that do exist
     pokemonJson = await tryFetchPokemon(fname);
+  } catch {
+    try {
+      pokemonJson = await tryFetchViaForm(fname);
+    } catch {
+      // Final fallback: species -> default variety -> pokemon (handles names like "toxtricity")
+      pokemonJson = await tryFetchViaSpecies(fname);
+    }
   }
 
   const id: number = Number(pokemonJson?.id ?? 0);
