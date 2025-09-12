@@ -533,9 +533,11 @@ export default function Pokedex() {
         // Reuse existing retry helper for robustness
         const forms: FormInfo[] = await runWithRetries(() => fetchAlternateForms(), 5, 500);
 
-        // Flatten all form names, excluding any accidental mega/gmax (already excluded in fetchAlternateForms)
+        // Flatten base species + all form names, excluding any accidental mega/gmax (already excluded in fetchAlternateForms)
         const names: string[] = [];
         for (const row of forms) {
+          // Include base (default) form
+          if (row.speciesName) names.push(String(row.speciesName).toLowerCase());
           for (const f of row.forms) {
             if (!f.formName) continue;
             const n = String(f.formName).toLowerCase();
@@ -617,9 +619,11 @@ export default function Pokedex() {
         // Reuse existing retry helper for robustness
         const forms: FormInfo[] = await runWithRetries(() => fetchAlternateForms(), 5, 500);
 
-        // Flatten all form names, excluding any accidental mega/gmax (already excluded in fetchAlternateForms)
+        // Flatten base species + all form names, excluding any accidental mega/gmax (already excluded in fetchAlternateForms)
         const names: string[] = [];
         for (const row of forms) {
+          // Include base (default) form
+          if (row.speciesName) names.push(String(row.speciesName).toLowerCase());
           for (const f of row.forms) {
             if (!f.formName) continue;
             const n = String(f.formName).toLowerCase();
