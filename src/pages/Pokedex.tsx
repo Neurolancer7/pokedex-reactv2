@@ -325,10 +325,19 @@ export default function Pokedex() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      if (selectedRegion !== "all" && selectedFormCategory !== "gigantamax") {
+      // Skip Gmax when Mega filter is active
+      if (selectedFormCategory === "mega") {
         setGmaxList([]);
         return;
       }
+
+      // If not "All" region, only fetch Gmax when the forms filter is explicitly "gigantamax"
+      if (selectedRegion !== "all" && selectedFormCategory !== "gigantamax") {
+        setGmaxList([]);
+        setGmaxLoading(false);
+        return;
+      }
+
       try {
         setGmaxLoading(true);
         const list = await fetchGigantamaxList(5);
@@ -357,11 +366,10 @@ export default function Pokedex() {
     const listJson = await fetchJsonWithRetry<any>(listUrl);
     const results: Array<{ name: string; url: string }> = Array.isArray(listJson?.results) ? listJson.results : [];
 
-    // Filter names containing 'mega' and exclude known non-mega variants
+    // Strictly include only true Mega form names (avoid false positives like 'meganium', 'yanmega')
     const megaCandidates = results
       .map((r) => String(r?.name ?? "").toLowerCase())
-      .filter((n) => n.includes("mega"))
-      .filter((n) => !n.includes("rayquaza-mega") || n.includes("mega")); // keep Rayquaza Mega too
+      .filter((n) => n.includes("-mega"));
 
     // 2) fetch each pokemon-form detail, then fetch the linked pokemon to build Pokémon cards
     const out: Pokemon[] = [];
@@ -466,14 +474,12 @@ export default function Pokedex() {
     };
   }, [selectedRegion, selectedFormCategory]);
 
-  // Client-side filtering for search and types; ignore form categories for the unified list
-  const filteredList = (
-    selectedFormCategory === "mega"
-      ? megaList
-      : selectedFormCategory === "gigantamax"
-        ? (gmaxList as unknown as Pokemon[])
-        : masterList
-  ).filter((p) => {
+  // Client-side filtering for search and types; switch dataset by forms filter
+  const sourceList = selectedFormCategory === "mega" ? megaList
+                    : selectedFormCategory === "gigantamax" ? gmaxList
+                    : masterList;
+
+  const filteredList = sourceList.filter((p) => {
     const matchesSearch =
       !searchQuery ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -788,8 +794,8 @@ export default function Pokedex() {
                 selectedFormCategory === "mega"
                   ? megaLoading
                   : selectedFormCategory === "gigantamax"
-                    ? gmaxLoading
-                    : loadingMaster
+                  ? gmaxLoading
+                  : loadingMaster
               }
             />
           </motion.div>
@@ -849,7 +855,7 @@ export default function Pokedex() {
           </div>
 
           {/* All Regions extras: Gigantamax, Mega, Alternate Forms */}
-          {selectedRegion === "all" && !["mega", "gigantamax"].includes(selectedFormCategory || "") && (
+          {selectedRegion === "all" && !selectedFormCategory && (
             <div className="mt-12 space-y-10">
               {/* Gigantamax Section */}
               <section>
