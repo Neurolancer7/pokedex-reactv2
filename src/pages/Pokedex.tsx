@@ -690,24 +690,31 @@ export default function Pokedex() {
     });
   }, [pokemonData, showFavorites, fetchPokemonData]);
 
-  // Auto-fetch the selected generation if it appears uncached (no results after selecting)
+  // Auto-fetch the selected generation if it's incomplete (ensures missing IDs like #180/#181/#195 are cached)
   useEffect(() => {
     if (showFavorites) return;                // skip in favorites view
     if (selectedFormCategory === "regional") return; // skip gen backfill in regional filter
     if (!selectedGeneration) return;          // only when a generation is chosen
     if (isRefreshing) return;                 // avoid overlapping fetches
-    if (items.length > 0) return;             // results already present for this filter
-    if (fetchedGenRef.current.has(selectedGeneration)) return; // already tried this gen
 
     const range = GEN_RANGES[selectedGeneration];
     if (!range) return;
+
+    const expectedCount = range.end - range.start + 1;
+    const currentTotal = pokemonData?.total ?? 0;
+
+    // If the current dataset for this filter is already complete, skip
+    if (currentTotal >= expectedCount) return;
+
+    // Prevent duplicate backfills for the same generation
+    if (fetchedGenRef.current.has(selectedGeneration)) return;
 
     fetchedGenRef.current.add(selectedGeneration);
     setIsRefreshing(true);
 
     const promise = runWithRetries(() =>
       fetchPokemonData({
-        limit: range.end - range.start + 1,
+        limit: expectedCount,
         offset: range.start - 1,
       })
     );
@@ -724,7 +731,14 @@ export default function Pokedex() {
     promise.finally(() => {
       setIsRefreshing(false);
     });
-  }, [selectedGeneration, selectedFormCategory, items.length, showFavorites, fetchPokemonData, isRefreshing]);
+  }, [
+    selectedGeneration,
+    selectedFormCategory,
+    showFavorites,
+    fetchPokemonData,
+    isRefreshing,
+    pokemonData?.total,
+  ]);
 
   // Auto-fetch full dataset if a Forms category is selected and results are empty (ensures form tags exist)
   useEffect(() => {
