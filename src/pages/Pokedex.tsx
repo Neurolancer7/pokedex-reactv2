@@ -95,6 +95,27 @@ async function fetchJsonWithRetry<T>(url: string, attempts = 4, baseDelayMs = 30
   throw lastErr instanceof Error ? lastErr : new Error("Failed to fetch JSON");
 }
 
+function gmaxToPokemon(g: GigantamaxPokemon): Pokemon {
+  return {
+    pokemonId: g.id,
+    name: g.gmaxFormName || `${g.name}-gmax`,
+    height: g.height ?? 0,
+    weight: g.weight ?? 0,
+    baseExperience: undefined,
+    types: g.types ?? [],
+    abilities: (g.abilities ?? []).map((a) => ({ name: a, isHidden: false })),
+    stats: [],
+    sprites: {
+      frontDefault: undefined,
+      frontShiny: undefined,
+      officialArtwork: g.sprite,
+    },
+    moves: [],
+    generation: 0,
+    species: undefined,
+  };
+}
+
 export default function Pokedex() {
   const { isAuthenticated } = useAuth();
   // Disable all data I/O across the page
@@ -299,6 +320,151 @@ export default function Pokedex() {
       cancelled = true;
     };
   }, [selectedRegion, PAGE_SIZE]);
+
+  // Add: fetch Gigantamax list when Region = All
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (selectedRegion !== "all") {
+        setGmaxList([]);
+        setMegaList([]);
+        return;
+      }
+      try {
+        setGmaxLoading(true);
+        const list = await fetchGigantamaxList(5);
+        if (!cancelled) {
+          const converted = list.map(gmaxToPokemon);
+          setGmaxList(converted as unknown as Pokemon[]);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to load Gigantamax forms";
+        toast.error(msg);
+        setGmaxList([]);
+      } finally {
+        setGmaxLoading(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRegion]);
+
+  // Add: fetch Mega Evolutions when Region = All using pokemon-form listing
+  async function fetchMegaForms(): Promise<Pokemon[]> {
+    // 1) list all pokemon-form entries and filter by '-mega' token
+    const listUrl = "https://pokeapi.co/api/v2/pokemon-form?limit=2000";
+    const listJson = await fetchJsonWithRetry<any>(listUrl);
+    const results: Array<{ name: string; url: string }> = Array.isArray(listJson?.results) ? listJson.results : [];
+
+    // Filter names containing 'mega' and exclude known non-mega variants
+    const megaCandidates = results
+      .map((r) => String(r?.name ?? "").toLowerCase())
+      .filter((n) => n.includes("mega"))
+      .filter((n) => !n.includes("rayquaza-mega") || n.includes("mega")); // keep Rayquaza Mega too
+
+    // 2) fetch each pokemon-form detail, then fetch the linked pokemon to build Pokémon cards
+    const out: Pokemon[] = [];
+    // throttle in small batches to avoid rate limits
+    const batchSize = 8;
+    for (let i = 0; i < megaCandidates.length; i += batchSize) {
+      const batch = megaCandidates.slice(i, i + batchSize);
+      const forms = await Promise.all(
+        batch.map(async (fname) => {
+          try {
+            const formJson = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-form/${fname}`);
+            const pUrl: string = String(formJson?.pokemon?.url ?? "");
+            const pokemonJson = await fetchJsonWithRetry<any>(pUrl);
+            const id: number = Number(pokemonJson?.id ?? 0);
+            if (!Number.isFinite(id) || id <= 0) return null;
+
+            const types: string[] = Array.isArray(pokemonJson?.types)
+              ? pokemonJson.types
+                  .map((t: any) => String(t?.type?.name ?? ""))
+                  .filter((t: string) => t.length > 0)
+              : [];
+
+            const abilities: string[] = Array.isArray(pokemonJson?.abilities)
+              ? pokemonJson.abilities
+                  .map((a: any) => String(a?.ability?.name ?? ""))
+                  .filter((s: string) => s.length > 0)
+              : [];
+
+            const height: number = typeof pokemonJson?.height === "number" ? pokemonJson.height : 0;
+            const weight: number = typeof pokemonJson?.weight === "number" ? pokemonJson.weight : 0;
+
+            const official =
+              pokemonJson?.sprites?.other?.["official-artwork"]?.front_default ??
+              `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
+
+            const p: Pokemon = {
+              pokemonId: id,
+              name: String(formJson?.name ?? fname),
+              height,
+              weight,
+              baseExperience: undefined,
+              types,
+              abilities: abilities.map((a) => ({ name: a, isHidden: false })),
+              stats: [],
+              sprites: {
+                frontDefault: undefined,
+                frontShiny: undefined,
+                officialArtwork: official,
+              },
+              moves: [],
+              generation: 0,
+              species: undefined,
+            };
+            return p;
+          } catch {
+            return null;
+          }
+        })
+      );
+      for (const p of forms) if (p) out.push(p);
+    }
+
+    // Deduplicate by pokemonId + name (some games reuse IDs for forms)
+    const seen = new Set<string>();
+    const deduped: Pokemon[] = [];
+    for (const p of out) {
+      const key = `${p.pokemonId}:${p.name.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(p);
+    }
+
+    // Sort by national dex id then name
+    deduped.sort((a, b) => a.pokemonId - b.pokemonId || a.name.localeCompare(b.name));
+    return deduped;
+  }
+
+  // Hook up Mega loading for Region = All
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (selectedRegion !== "all") {
+        setMegaList([]);
+        return;
+      }
+      try {
+        setMegaLoading(true);
+        const list = await fetchMegaForms();
+        if (!cancelled) setMegaList(list);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to load Mega Evolutions";
+        toast.error(msg);
+        setMegaList([]);
+      } finally {
+        setMegaLoading(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRegion]);
 
   // Client-side filtering for search and types; ignore form categories for the unified list
   const filteredList = masterList.filter((p) => {
@@ -661,6 +827,45 @@ export default function Pokedex() {
               )}
             </>
           </div>
+
+          {/* All Regions extras: Gigantamax, Mega, Alternate Forms */}
+          {selectedRegion === "all" && (
+            <div className="mt-12 space-y-10">
+              {/* Gigantamax Section */}
+              <section>
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-xl font-semibold tracking-tight">Gigantamax Forms</h3>
+                </div>
+                <PokemonGrid
+                  pokemon={gmaxList as unknown as Pokemon[]}
+                  favorites={[]}
+                  onFavoriteToggle={handleFavoriteToggle}
+                  isLoading={gmaxLoading}
+                />
+              </section>
+
+              {/* Mega Evolutions Section */}
+              <section>
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-xl font-semibold tracking-tight">Mega Evolutions</h3>
+                </div>
+                <PokemonGrid
+                  pokemon={megaList}
+                  favorites={[]}
+                  onFavoriteToggle={handleFavoriteToggle}
+                  isLoading={megaLoading}
+                />
+              </section>
+
+              {/* Alternate Forms Section (tabular details) */}
+              <section>
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-xl font-semibold tracking-tight">Alternate Forms (Details)</h3>
+                </div>
+                <AlternateForms />
+              </section>
+            </div>
+          )}
         </main>
       </div>
     </ErrorBoundary>
