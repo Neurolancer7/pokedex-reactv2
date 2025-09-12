@@ -706,10 +706,6 @@ export default function Pokedex() {
     // If the current dataset for this filter is already complete, skip
     if (currentTotal >= expectedCount) return;
 
-    // Prevent duplicate backfills for the same generation
-    if (fetchedGenRef.current.has(selectedGeneration)) return;
-
-    fetchedGenRef.current.add(selectedGeneration);
     setIsRefreshing(true);
 
     const promise = runWithRetries(() =>
