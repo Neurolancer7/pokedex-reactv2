@@ -734,12 +734,19 @@ export default function Pokedex() {
   }, [selectedFormCategory]);
 
   // Derive display items
-  const displayPokemon = filteredList.slice(0, visibleCount);
+  const displayPokemon =
+    selectedFormCategory === "alternate"
+      ? filteredList
+      : filteredList.slice(0, visibleCount);
 
-  // Maintain hasMore based on filtered length
+  // Maintain hasMore based on filtered length (use hook's flag for alternate forms)
   useEffect(() => {
-    setHasMore(visibleCount < filteredList.length);
-  }, [visibleCount, filteredList.length]);
+    if (selectedFormCategory === "alternate") {
+      setHasMore(altHasMoreHook);
+    } else {
+      setHasMore(visibleCount < filteredList.length);
+    }
+  }, [selectedFormCategory, visibleCount, filteredList.length, altHasMoreHook]);
 
   // Override infinite scroll to use visibleCount / filteredList
   useEffect(() => {
