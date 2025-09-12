@@ -78,6 +78,8 @@ class ErrorBoundary extends React.Component<{ onRetry: () => void; children: Rea
 
 export default function Pokedex() {
   const { isAuthenticated } = useAuth();
+  // Disable all data I/O across the page
+  const DATA_DISABLED = true;
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("theme") === "dark" || 
@@ -311,147 +313,6 @@ export default function Pokedex() {
   ];
 
   // Add: When switching into Mega Evolutions filter, clear current list and load only the requested megas
-  useEffect(() => {
-    if (selectedFormCategory === "mega") {
-      // Clear default/alt contexts so only megas show
-      setItems([]);
-      setOffset(0);
-      setHasMore(false);
-      setIsLoadingMore(false);
-
-      // Clear alternate context too
-      altQueueRef.current = null;
-      setAltList([]);
-      setAltHasMore(false);
-      setAltLoading(false);
-
-      // Load megas
-      setMegaList([]);
-      setMegaLoading(true);
-      setMegaVisibleCount(30); // ensure default 30 on enter
-      (async () => {
-        try {
-          const settled = await Promise.allSettled(MEGA_SPECIES.map((s) => fetchMegasForSpecies(s)));
-          const merged: Record<number, Pokemon> = Object.create(null);
-          for (const r of settled) {
-            if (r.status === "fulfilled") {
-              for (const p of r.value) merged[p.pokemonId] = p;
-            }
-          }
-          const finalList = Object.values(merged).sort((a, b) => a.pokemonId - b.pokemonId);
-          setMegaList(finalList);
-        } finally {
-          setMegaLoading(false);
-        }
-      })();
-    } else {
-      // Leaving mega mode: reset mega list
-      setMegaList([]);
-      setMegaLoading(false);
-      setMegaVisibleCount(30); // reset on leave
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFormCategory]);
-
-  // Add: Clear cache on mount
-  const clearCache = useConvexMutation(api.pokemon.clearCache);
-
-  // When switching into Alternate Forms filter, reset local queue and list, and load exactly 30 by default with token
-  useEffect(() => {
-    if (selectedFormCategory === "alternate") {
-      // Invalidate any previous runs
-      altTokenRef.current += 1;
-      const token = altTokenRef.current;
-
-      // clear default list & pagination context so only alt data shows
-      setItems([]);
-      setOffset(0);
-      setHasMore(false);
-      setIsLoadingMore(false);
-
-      // seed queue and list
-      altQueueRef.current = [...ALT_SPECIES];
-      setAltList([]);
-      setAltHasMore(altQueueRef.current.length > 0);
-
-      // Load exactly 30 by default (or as close as possible)
-      loadAltUntil(30, token);
-
-      setInfiniteEnabled(false); // disable infinite until first manual load
-    } else {
-      // leaving alternate mode: invalidate and clean up
-      altTokenRef.current += 1;
-      altQueueRef.current = null;
-      setAltList([]);
-      setAltHasMore(false);
-      setAltLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFormCategory]);
-
-  // When switching into Gigantamax filter, load only the Gigantamax forms
-  useEffect(() => {
-    if (selectedFormCategory === "gigantamax") {
-      // Clear default/alt/mega contexts so only Gmax data shows
-      setItems([]);
-      setOffset(0);
-      setHasMore(false);
-      setIsLoadingMore(false);
-
-      altQueueRef.current = null;
-      setAltList([]);
-      setAltHasMore(false);
-      setAltLoading(false);
-
-      setMegaList([]);
-      setMegaLoading(false);
-
-      // Load Gmax list
-      setGmaxList([]);
-      setGmaxLoading(true);
-      setGmaxVisibleCount(30); // ensure default 30 on enter
-      (async () => {
-        try {
-          const list = await fetchGigantamaxList(5);
-          // Map GigantamaxPokemon -> Pokemon minimal fields for display
-          const mapped: Pokemon[] = list.map((g: GigantamaxPokemon) => ({
-            pokemonId: g.id,
-            // Use the actual gmax form name to drive UI formatting ("Gigantamax Charizard")
-            name: g.gmaxFormName,
-            height: g.height,
-            weight: g.weight,
-            baseExperience: undefined,
-            types: g.types,
-            abilities: g.abilities.map((a) => ({ name: a, isHidden: false })),
-            stats: [],
-            sprites: {
-              officialArtwork: g.sprite,
-              frontDefault: undefined,
-              frontShiny: undefined,
-            },
-            moves: [],
-            generation: 8,
-            species: undefined,
-          }));
-          // Ensure stable order by national dex id
-          setGmaxList(mapped.sort((a, b) => a.pokemonId - b.pokemonId));
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : "Failed to load Gigantamax data";
-          toast.error(msg);
-        } finally {
-          setGmaxLoading(false);
-        }
-      })();
-    } else {
-      // Leaving gigantaMax mode: reset gmax list
-      setGmaxList([]);
-      setGmaxLoading(false);
-      setGmaxVisibleCount(30); // reset on leave
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFormCategory]);
-
-  // Add: When switching into Mega Evolutions filter, clear current list and load only the requested megas
   const fetchMegasForSpecies = async (speciesName: string): Promise<Pokemon[]> => {
     try {
       const speciesData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${speciesName}`);
@@ -480,38 +341,43 @@ export default function Pokedex() {
 
   const pokemonData = useConvexQuery(
     api.pokemon.list,
-    selectedFormCategory === "gender-diff"
+    DATA_DISABLED
       ? "skip"
-      : {
-          limit: showFavorites ? 0 : BATCH_LIMIT,
-          offset: showFavorites ? 0 : offset,
-          search: searchQuery || undefined,
-          types: selectedTypes.length > 0 ? selectedTypes : undefined,
-          forms: selectedFormCategory ? [selectedFormCategory] : undefined,
-        }
+      : (selectedFormCategory === "gender-diff"
+          ? "skip"
+          : {
+              limit: showFavorites ? 0 : BATCH_LIMIT,
+              offset: showFavorites ? 0 : offset,
+              search: searchQuery || undefined,
+              types: selectedTypes.length > 0 ? selectedTypes : undefined,
+              forms: selectedFormCategory ? [selectedFormCategory] : undefined,
+            })
   );
 
   const nextPokemonData = useConvexQuery(
     api.pokemon.list,
-    selectedFormCategory === "gender-diff"
+    DATA_DISABLED
       ? "skip"
-      : {
-          limit: showFavorites ? 0 : BATCH_LIMIT,
-          offset: showFavorites ? 0 : offset + BATCH_LIMIT,
-          search: searchQuery || undefined,
-          types: selectedTypes.length > 0 ? selectedTypes : undefined,
-          forms: selectedFormCategory ? [selectedFormCategory] : undefined,
-        }
+      : (selectedFormCategory === "gender-diff"
+          ? "skip"
+          : {
+              limit: showFavorites ? 0 : BATCH_LIMIT,
+              offset: showFavorites ? 0 : offset + BATCH_LIMIT,
+              search: searchQuery || undefined,
+              types: selectedTypes.length > 0 ? selectedTypes : undefined,
+              forms: selectedFormCategory ? [selectedFormCategory] : undefined,
+            })
   );
 
   const favorites = useConvexQuery(
     api.pokemon.getFavorites,
-    isAuthenticated ? {} : undefined
+    DATA_DISABLED ? "skip" : (isAuthenticated ? {} : undefined)
   );
 
   const addToFavorites = useConvexMutation(api.pokemon.addToFavorites);
   const removeFromFavorites = useConvexMutation(api.pokemon.removeFromFavorites);
   const fetchPokemonData = useAction(api.pokemonData.fetchAndCachePokemon);
+  const clearCache = useConvexMutation(api.pokemon.clearCache);
 
   // Disable any automatic data backfill or auto-fetching
   const AUTO_FETCH_ENABLED = false;
@@ -519,8 +385,7 @@ export default function Pokedex() {
   // On page load: purge all cached data (pokemon, species, forms, regional, gender)
   useEffect(() => {
     void clearCache({ scopes: ["pokemon", "species", "forms", "regional", "gender"] });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [clearCache]);
 
   // Theme management
   useEffect(() => {
@@ -554,6 +419,10 @@ export default function Pokedex() {
   };
 
   const handleFavoriteToggle = async (pokemonId: number) => {
+    if (DATA_DISABLED) {
+      toast("Favorites are disabled for this demo");
+      return;
+    }
     if (!isAuthenticated) {
       toast.error("Please sign in to manage favorites");
       return;
@@ -630,6 +499,10 @@ export default function Pokedex() {
   };
 
   const handleDataRefresh = async () => {
+    if (DATA_DISABLED) {
+      toast("Data is disabled for this demo");
+      return;
+    }
     try {
       setIsRefreshing(true);
 
@@ -655,6 +528,7 @@ export default function Pokedex() {
 
   // Auto-fetch and cache Pokémon on first load if DB is empty
   useEffect(() => {
+    if (DATA_DISABLED) return; // fully disabled
     if (!AUTO_FETCH_ENABLED) return; // disable auto-loading entirely
     if (showFavorites) return;
     if (!pokemonData) return; // wait for first response
@@ -682,6 +556,7 @@ export default function Pokedex() {
 
   // Auto-fetch full dataset if a Forms category is selected and results are empty (ensures form tags exist)
   useEffect(() => {
+    if (DATA_DISABLED) return; // fully disabled
     if (!AUTO_FETCH_ENABLED) return; // disable auto-loading entirely
     if (showFavorites) return;
     if (!selectedFormCategory) return;
@@ -710,10 +585,9 @@ export default function Pokedex() {
 
   // Backfill all Pokémon in default (All Forms) state to ensure full dataset is available for infinite scroll
   useEffect(() => {
-    // Only in default list (not favorites, not alternate forms)
+    if (DATA_DISABLED) return; // fully disabled
     if (!AUTO_FETCH_ENABLED) return; // disable auto-loading entirely
     if (showFavorites) return;
-    if (selectedFormCategory === "alternate") return;
     if (!pokemonData) return;
     if (isRefreshing) return;
 
@@ -732,6 +606,7 @@ export default function Pokedex() {
 
   // Infinite scroll: auto-load when near bottom (fallback button remains)
   useEffect(() => {
+    if (DATA_DISABLED) return; // fully disabled, no listeners
     const THRESHOLD_PX = 400;
 
     const handleScroll = () => {
@@ -834,6 +709,7 @@ export default function Pokedex() {
 
   // Append new page results
   useEffect(() => {
+    if (DATA_DISABLED) return; // fully disabled
     if (showFavorites) return; // favorites view doesn't paginate
     if (!pokemonData || !pokemonData.pokemon) return;
 
@@ -878,14 +754,7 @@ export default function Pokedex() {
       );
 
   const favoriteIds = Array.isArray(favorites) ? favorites.map((f) => f.pokemonId) : [];
-  const isInitialLoading =
-    selectedFormCategory === "alternate"
-      ? altList.length === 0 && (altLoading || isLoadingMore)
-      : (selectedFormCategory === "mega"
-          ? megaList.length === 0 && megaLoading
-          : (selectedFormCategory === "gigantamax"
-              ? gmaxList.length === 0 && gmaxLoading
-              : (!showFavorites && pokemonData === undefined && items.length === 0)));
+  const isInitialLoading = false;
 
   const totalItems = showFavorites ? (favorites?.length ?? 0) : (pokemonData?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalItems / INITIAL_LIMIT));
@@ -1018,16 +887,16 @@ export default function Pokedex() {
           )}
 
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}>
-            {selectedFormCategory === "gender-diff" ? (
+            {selectedFormCategory === "gender-diff" && !DATA_DISABLED ? (
               <GenderDiffGrid />
             ) : (
               <PokemonGrid
                 key={`${selectedFormCategory === "alternate" ? "alt" : (showFavorites ? "fav" : "infinite")
                 }-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
-                pokemon={displayPokemon as unknown as Pokemon[]}
-                favorites={favoriteIds}
+                pokemon={[] as unknown as Pokemon[]}
+                favorites={[]}
                 onFavoriteToggle={handleFavoriteToggle}
-                isLoading={isInitialLoading}
+                isLoading={false}
               />
             )}
           </motion.div>
