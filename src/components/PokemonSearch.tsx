@@ -49,6 +49,11 @@ export function PokemonSearch({
   const hasTypesActive = selectedTypes.length > 0;
   const hasFormActive = !!selectedFormCategory && selectedFormCategory !== "any";
 
+  // Add: helper to clean region labels by removing number ranges in parentheses like (#-#)
+  const cleanRegionLabel = (label: string) => {
+    return label.replace(/\(\s*#.*?\)/g, "").trim();
+  };
+
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
       try {
@@ -106,7 +111,6 @@ export function PokemonSearch({
     { value: "alternate", label: "Alternate Forms" },
     { value: "mega", label: "Mega Evolutions" },
     { value: "gigantamax", label: "Gigantamax Forms" },
-    { value: "gender-diff", label: "Gender Differences" },
   ];
 
   return (
@@ -197,40 +201,6 @@ export function PokemonSearch({
           </Select>
         </div>
 
-        {/* Gender Difference and Gender Change badges */}
-        {selectedFormCategory === "gender-diff" && (
-          <div className="shrink-0">
-            <span
-              title="Gender Differences"
-              aria-label="Gender Differences"
-              className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-pink-500/40"
-            >
-              <img
-                src="https://harmless-tapir-303.convex.cloud/api/storage/d3256155-fdbb-486b-b117-e4850f259ab5"
-                alt="Gender Differences"
-                className="h-6 w-6 object-contain drop-shadow"
-              />
-            </span>
-          </div>
-        )}
-
-        {/* Gender Change filter badge (same image/style as requested) */}
-        {selectedFormCategory === "gender-change" && (
-          <div className="shrink-0">
-            <span
-              title="Gender Change"
-              aria-label="Gender Change"
-              className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-pink-500/40"
-            >
-              <img
-                src="https://harmless-tapir-303.convex.cloud/api/storage/d3256155-fdbb-486b-b117-e4850f259ab5"
-                alt="Gender Change"
-                className="h-6 w-6 object-contain drop-shadow"
-              />
-            </span>
-          </div>
-        )}
-
         {/* Region Filter */}
         <div className="shrink-0">
           <Select value={selectedRegion} onValueChange={onRegionChange}>
@@ -250,7 +220,7 @@ export function PokemonSearch({
             <SelectContent>
               {regionOptions.map((opt) => (
                 <SelectItem key={opt.key} value={opt.key}>
-                  {opt.label}
+                  {cleanRegionLabel(opt.label)}
                 </SelectItem>
               ))}
             </SelectContent>
