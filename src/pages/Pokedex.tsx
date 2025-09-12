@@ -13,7 +13,7 @@ import { PokemonSearch } from "@/components/PokemonSearch";
 import { PokemonGrid } from "@/components/PokemonGrid";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlternateForms } from "@/components/AlternateForms";
+/* removed: AlternateForms table view is no longer used in All Regions extras */
 import { GenderDiffGrid } from "@/components/GenderDiffGrid";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -559,7 +559,7 @@ export default function Pokedex() {
               }
             })
           );
-          for (const p of cards) if (p) out.push(p);
+          for (const p of cards) if (p) out.push(p as Pokemon);
           if (cancelled) break;
         }
 
@@ -587,6 +587,84 @@ export default function Pokedex() {
       cancelled = true;
     };
   }, [selectedFormCategory]);
+
+  // Add: Effect to fetch and populate alternate forms when filter is active
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      // Only fetch when the 'alternate' forms filter is active OR for All Regions extras section
+      const shouldFetch =
+        selectedFormCategory === "alternate" || (selectedRegion === "all" && !selectedFormCategory);
+
+      if (!shouldFetch) {
+        setAltList([]);
+        setAltHasMore(false);
+        setAltLoading(false);
+        return;
+      }
+      try {
+        setAltLoading(true);
+        // Reuse existing retry helper for robustness
+        const forms: FormInfo[] = await runWithRetries(() => fetchAlternateForms(), 5, 500);
+
+        // Flatten all form names, excluding any accidental mega/gmax (already excluded in fetchAlternateForms)
+        const names: string[] = [];
+        for (const row of forms) {
+          for (const f of row.forms) {
+            if (!f.formName) continue;
+            const n = String(f.formName).toLowerCase();
+            if (n.includes("-mega") || n.includes("gigantamax") || n.includes("-gmax")) continue;
+            names.push(n);
+          }
+        }
+
+        // Deduplicate
+        const uniq = Array.from(new Set(names));
+
+        // Map to Pokemon entries by fetching /pokemon/{formName} in small batches
+        const batchSize = 8;
+        const out: Pokemon[] = [];
+        for (let i = 0; i < uniq.length; i += batchSize) {
+          const batch = uniq.slice(i, i + batchSize);
+          const cards = await Promise.all(
+            batch.map(async (fname) => {
+              try {
+                const p = await buildPokemonFromFormName(fetchJsonWithRetry, fname);
+                return p;
+              } catch {
+                return null;
+              }
+            })
+          );
+          for (const p of cards) if (p) out.push(p as Pokemon);
+          if (cancelled) break;
+        }
+
+        // Sort by national dex id then name for stability
+        out.sort((a, b) => a.pokemonId - b.pokemonId || a.name.localeCompare(b.name));
+
+        if (!cancelled) {
+          setAltList(out);
+          setAltHasMore(false);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to load alternate forms";
+        toast.error(msg);
+        if (!cancelled) {
+          setAltList([]);
+          setAltHasMore(false);
+        }
+      } finally {
+        if (!cancelled) setAltLoading(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFormCategory, selectedRegion]);
 
   // Client-side filtering for search and types; switch dataset by forms filter
   const sourceList = selectedFormCategory === "mega" ? megaList
@@ -1000,12 +1078,17 @@ export default function Pokedex() {
                 />
               </section>
 
-              {/* Alternate Forms Section (tabular details) */}
+              {/* Alternate Forms Section (card grid with sprites/details) */}
               <section>
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-xl font-semibold tracking-tight">Alternate Forms (Details)</h3>
+                  <h3 className="text-xl font-semibold tracking-tight">Alternate Forms</h3>
                 </div>
-                <AlternateForms />
+                <PokemonGrid
+                  pokemon={altList as unknown as Pokemon[]}
+                  favorites={[]}
+                  onFavoriteToggle={handleFavoriteToggle}
+                  isLoading={altLoading}
+                />
               </section>
             </div>
           )}
