@@ -15,6 +15,8 @@ http.route({
     const region = (url.searchParams.get("region") || "").toLowerCase();
     const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") || "40"), 200));
     const offset = Math.max(0, Number(url.searchParams.get("offset") || "0"));
+    const resetParam = (url.searchParams.get("reset") || "").toLowerCase();
+    const reset = resetParam === "1" || resetParam === "true";
 
     if (!region) {
       return new Response(JSON.stringify({ error: "region is required" }), {
@@ -24,24 +26,31 @@ http.route({
     }
 
     try {
+      // Optional: purge cached region before rebuild
+      if (reset) {
+        try {
+          await ctx.runMutation(internal.regionalDex.clearRegion, { region });
+        } catch (e) {
+          console.error("clearRegion error:", e);
+        }
+      }
+
       // Check current cache count
       let count = 0;
       try {
         count = await ctx.runQuery(internal.regionalDex.countByRegion, { region });
       } catch (e) {
-        // ignore count errors, proceed to try building
         console.error("countByRegion error:", e);
       }
 
-      // If first page and cache is empty, build synchronously to guarantee completeness
-      if (offset === 0 && count === 0) {
+      // If first page and cache is empty (or reset), build synchronously
+      if (offset === 0 && (count === 0 || reset)) {
         await ctx.runAction(internal.regionalDexActions.ensureRegion, { region });
       } else {
         // Otherwise, best effort background ensure to backfill missing entries
         try {
           await ctx.runAction(internal.regionalDexActions.ensureRegion, { region });
         } catch (e) {
-          // ignore background ensure failure; proceed to serve what we have
           console.error("ensureRegion (background) error:", e);
         }
       }

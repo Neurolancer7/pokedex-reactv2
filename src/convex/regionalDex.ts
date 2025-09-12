@@ -85,3 +85,16 @@ export const page = query({
     };
   },
 });
+
+export const clearRegion = internalMutation({
+  args: { region: v.string() },
+  handler: async (ctx, args) => {
+    const q = ctx.db
+      .query("regionalDex")
+      .withIndex("by_region_and_dexId", (qq) => qq.eq("region", args.region));
+    for await (const row of q) {
+      await ctx.db.delete(row._id);
+    }
+    return true;
+  },
+});
