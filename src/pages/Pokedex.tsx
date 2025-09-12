@@ -81,20 +81,88 @@ class ErrorBoundary extends React.Component<{ onRetry: () => void; children: Rea
 }
 
 async function fetchJsonWithRetry<T>(url: string, attempts = 4, baseDelayMs = 300): Promise<T> {
+  // Enhanced: add timeout, handle 429 Retry-After, and clearer error messages
   let lastErr: unknown;
+
   const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+  const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
   for (let i = 0; i < attempts; i++) {
+    const controller = new AbortController();
+    const timeoutMs = 12000; // 12s per attempt
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return (await res.json()) as T;
+      const res = await fetch(url, { signal: controller.signal });
+
+      // Special handling: 429 Too Many Requests
+      if (res.status === 429) {
+        const retryAfterHeader = res.headers.get("retry-after");
+        // Retry-After can be seconds or HTTP-date; handle seconds form primarily
+        const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+        const backoffMs =
+          Number.isFinite(retryAfterSeconds)
+            ? clamp(retryAfterSeconds * 1000, 500, 15000)
+            : baseDelayMs * Math.pow(2, i);
+
+        if (i === attempts - 1) {
+          throw new Error("Rate limited by the API (429). Please wait a moment and try again.");
+        }
+        const jitter = Math.floor(Math.random() * 200);
+        await sleep(backoffMs + jitter);
+        continue;
+      }
+
+      if (!res.ok) {
+        // Surface common cases with better messages
+        if (res.status === 404) {
+          throw new Error("Not found (404). Please check the Pokémon name or ID.");
+        }
+        if (res.status >= 500) {
+          throw new Error(`Server error (${res.status}). Please retry shortly.`);
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      try {
+        const data = (await res.json()) as T;
+        return data;
+      } catch {
+        throw new Error("Invalid JSON received from API.");
+      }
     } catch (err) {
       lastErr = err;
-      if (i === attempts - 1) break;
-      const jitter = Math.floor(Math.random() * 150);
+
+      // If aborted due to timeout, consider retriable within attempts
+      const isAbort = err instanceof DOMException && err.name === "AbortError";
+      const msg = err instanceof Error ? err.message : String(err);
+
+      const retriable =
+        isAbort ||
+        /\bNetworkError\b/i.test(msg) ||
+        /\bFailed to fetch\b/i.test(msg) ||
+        /\bAbortError\b/i.test(msg) ||
+        /\bfetch failed\b/i.test(msg) ||
+        /\bETIMEDOUT\b/i.test(msg) ||
+        /\bECONNRESET\b/i.test(msg) ||
+        /\bEAI_AGAIN\b/i.test(msg) ||
+        /\bsocket hang up\b/i.test(msg) ||
+        /\bClient network socket disconnected\b/i.test(msg) ||
+        /\bServer error \(\d{3}\)\b/i.test(msg);
+
+      if (i === attempts - 1 || !retriable) {
+        clearTimeout(timeout);
+        break;
+      }
+
+      // Jittered exponential backoff
+      const jitter = Math.floor(Math.random() * 250);
       await sleep(baseDelayMs * Math.pow(2, i) + jitter);
+    } finally {
+      clearTimeout(timeout);
     }
   }
+
   throw lastErr instanceof Error ? lastErr : new Error("Failed to fetch JSON");
 }
 
