@@ -217,6 +217,8 @@ export default function Pokedex() {
   const autoFetchRef = useRef(false);
   // Track form categories we've attempted to fetch
   const fetchedFormCategoryRef = useRef<Set<string>>(new Set());
+  // Add: small cooldown for alternate infinite scroll to prevent bursts
+  const altScrollCooldownRef = useRef(0);
 
   // Gigantamax list state (client-side, uses lib/gigantamax.ts)
   const [gmaxList, setGmaxList] = useState<Pokemon[]>([]);
@@ -642,6 +644,61 @@ export default function Pokedex() {
       cancelled = true;
     };
   }, [selectedFormCategory, selectedRegion]);
+
+  // Add: Infinite scroll for Alternate Forms filter specifically
+  useEffect(() => {
+    if (selectedFormCategory !== "alternate") return;
+
+    const THRESHOLD_PX = 400;
+    const onScroll = () => {
+      if (altLoadingHook || !altHasMoreHook) return;
+
+      const scrollY = window.scrollY || window.pageYOffset;
+      const viewportH =
+        window.innerHeight || document.documentElement.clientHeight;
+      const docH = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.offsetHeight,
+        document.body.clientHeight,
+        document.documentElement.clientHeight
+      );
+      const nearBottom = scrollY + viewportH >= docH - THRESHOLD_PX;
+      if (!nearBottom) return;
+
+      // Cooldown to avoid rapid duplicate fetches
+      const now = Date.now();
+      if (now - altScrollCooldownRef.current < 800) return;
+      altScrollCooldownRef.current = now;
+
+      void fetchMoreAlt();
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [selectedFormCategory, altHasMoreHook, altLoadingHook, fetchMoreAlt]);
+
+  // Add: If Alternate Forms content doesn't fill the viewport, prefetch one more page
+  useEffect(() => {
+    if (selectedFormCategory !== "alternate") return;
+    if (altLoadingHook || !altHasMoreHook) return;
+
+    const viewportH = window.innerHeight || document.documentElement.clientHeight;
+    const docH = Math.max(
+      document.body.scrollHeight,
+      document.documentElement.scrollHeight,
+      document.body.offsetHeight,
+      document.documentElement.offsetHeight,
+      document.body.clientHeight,
+      document.documentElement.clientHeight
+    );
+
+    // If page can't scroll yet, fetch one more batch
+    if (docH <= viewportH + 200) {
+      void fetchMoreAlt();
+    }
+  }, [selectedFormCategory, altItems.length, altHasMoreHook, altLoadingHook, fetchMoreAlt]);
 
   // Client-side filtering for search and types; switch dataset by forms filter
   const sourceList = selectedFormCategory === "mega" ? megaList
