@@ -481,6 +481,13 @@ export default function Pokedex() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
+      // NEW: Skip entirely when searching
+      if (searchQuery && searchQuery.trim().length > 0) {
+        setGmaxList([]);
+        setGmaxLoading(false);
+        return;
+      }
+
       // Skip Gmax when Mega filter is active
       if (selectedFormCategory === "mega") {
         setGmaxList([]);
@@ -513,7 +520,41 @@ export default function Pokedex() {
     return () => {
       cancelled = true;
     };
-  }, [selectedRegion, selectedFormCategory]);
+  }, [selectedRegion, selectedFormCategory, searchQuery]);
+
+  // Hook up Mega loading for Region = All
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      // NEW: Skip entirely when searching
+      if (searchQuery && searchQuery.trim().length > 0) {
+        setMegaList([]);
+        setMegaLoading(false);
+        return;
+      }
+
+      // Fetch megas if either "All" region is active OR forms filter is set to "mega"
+      if (selectedRegion !== "all" && selectedFormCategory !== "mega") {
+        setMegaList([]);
+        return;
+      }
+      try {
+        setMegaLoading(true);
+        const list = await fetchMegaForms();
+        if (!cancelled) setMegaList(list);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to load Mega Evolutions";
+        toast.error(msg);
+        setMegaList([]);
+      } finally {
+        setMegaLoading(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRegion, selectedFormCategory, searchQuery]);
 
   // Add: fetch Mega Evolutions when Region = All using pokemon-form listing
   async function fetchMegaForms(): Promise<Pokemon[]> {
@@ -603,10 +644,62 @@ export default function Pokedex() {
     return deduped;
   }
 
+  // Add: fetch Gigantamax list when Region = All
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      // NEW: Skip entirely when searching
+      if (searchQuery && searchQuery.trim().length > 0) {
+        setGmaxList([]);
+        setGmaxLoading(false);
+        return;
+      }
+
+      // Skip Gmax when Mega filter is active
+      if (selectedFormCategory === "mega") {
+        setGmaxList([]);
+        return;
+      }
+
+      // If not "All" region, only fetch Gmax when the forms filter is explicitly "gigantamax"
+      if (selectedRegion !== "all" && selectedFormCategory !== "gigantamax") {
+        setGmaxList([]);
+        setGmaxLoading(false);
+        return;
+      }
+
+      try {
+        setGmaxLoading(true);
+        const list = await fetchGigantamaxList(5);
+        if (!cancelled) {
+          const converted = list.map(gmaxToPokemon);
+          setGmaxList(converted as unknown as Pokemon[]);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to load Gigantamax forms";
+        toast.error(msg);
+        setGmaxList([]);
+      } finally {
+        setGmaxLoading(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRegion, selectedFormCategory, searchQuery]);
+
   // Hook up Mega loading for Region = All
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
+      // NEW: Skip entirely when searching
+      if (searchQuery && searchQuery.trim().length > 0) {
+        setMegaList([]);
+        setMegaLoading(false);
+        return;
+      }
+
       // Fetch megas if either "All" region is active OR forms filter is set to "mega"
       if (selectedRegion !== "all" && selectedFormCategory !== "mega") {
         setMegaList([]);
@@ -628,7 +721,7 @@ export default function Pokedex() {
     return () => {
       cancelled = true;
     };
-  }, [selectedRegion, selectedFormCategory]);
+  }, [selectedRegion, selectedFormCategory, searchQuery]);
 
   // Add: Effect to fetch and populate alternate forms when filter is active
   useEffect(() => {
@@ -1157,7 +1250,7 @@ export default function Pokedex() {
           </div>
 
           {/* All Regions extras: Gigantamax, Mega, Alternate Forms */}
-          {selectedRegion === "all" && !selectedFormCategory && (
+          {selectedRegion === "all" && !selectedFormCategory && !(searchQuery && searchQuery.trim().length > 0) && (
             <div className="mt-12 space-y-10">
               {/* Gigantamax Section */}
               <section>
