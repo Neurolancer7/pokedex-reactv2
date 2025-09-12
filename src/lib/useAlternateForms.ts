@@ -13,11 +13,45 @@ type QueueItem = {
   formName: string; // pokemon-form name
 };
 
+// Add: sessionStorage-backed cache for built Pokemon
+const POKEMON_CACHE_KEY = "alternateForms:pokemonCache:v1";
+type CachedBuilt = Built;
+
+const pokemonCache: Map<string, CachedBuilt> = (() => {
+  try {
+    const raw = sessionStorage.getItem(POKEMON_CACHE_KEY);
+    if (!raw) return new Map();
+    const obj = JSON.parse(raw) as Record<string, CachedBuilt>;
+    const map = new Map<string, CachedBuilt>();
+    for (const [k, v] of Object.entries(obj)) {
+      map.set(k, v);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+})();
+
+function savePokemonCache() {
+  try {
+    const obj: Record<string, CachedBuilt> = {};
+    for (const [k, v] of pokemonCache.entries()) obj[k] = v;
+    sessionStorage.setItem(POKEMON_CACHE_KEY, JSON.stringify(obj));
+  } catch {
+    // ignore storage errors
+  }
+}
+
 // Build a Pokemon from a pokemon-form name by following the linked pokemon url.
 async function buildPokemonFromForm(
   apiBase: string,
   formName: string
 ): Promise<Built | null> {
+  // Fast path: cache
+  const key = String(formName).toLowerCase();
+  const cached = pokemonCache.get(key);
+  if (cached) return cached;
+
   try {
     // 1) pokemon-form -> get linked pokemon url (guaranteed valid)
     const formJson = await fetch(`${apiBase}/pokemon-form/${formName}`).then((r) => {
@@ -70,6 +104,11 @@ async function buildPokemonFromForm(
       generation: 0,
       species: undefined,
     };
+
+    // Save to cache
+    pokemonCache.set(key, out);
+    savePokemonCache();
+
     return out;
   } catch {
     return null;
@@ -153,15 +192,15 @@ export function useAlternateForms() {
       const end = Math.min(queue.length, cursor + PAGE_SIZE);
       const slice = queue.slice(start, end);
 
-      // Throttled parallelism
-      const CONCURRENCY = 8;
+      // Throttled parallelism - increase concurrency, reduce stagger
+      const CONCURRENCY = 16; // was 8
       const out: Built[] = [];
       for (let i = 0; i < slice.length; i += CONCURRENCY) {
         const batch = slice.slice(i, i + CONCURRENCY);
         const results = await Promise.all(
           batch.map(async (q) => {
             // small stagger to avoid burst
-            await sleep(40);
+            await sleep(10); // was 40
             return await buildPokemonFromForm(API_BASE, q.formName);
           })
         );
@@ -190,6 +229,13 @@ export function useAlternateForms() {
       setLoading(false);
     }
   }, [API_BASE, PAGE_SIZE, cursor, items, loading, queue]);
+
+  // Auto-fetch the first page once primed and queue is ready
+  useEffect(() => {
+    if (primed && !loading && items.length === 0 && queue && queue.length > 0) {
+      void fetchNextPage();
+    }
+  }, [primed, loading, items.length, queue, fetchNextPage]);
 
   const reset = useCallback(() => {
     setQueue(null);

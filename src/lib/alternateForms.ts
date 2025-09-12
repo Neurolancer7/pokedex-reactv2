@@ -80,7 +80,7 @@ export async function fetchAlternateForms(): Promise<FormInfo[]> {
 
   // Concurrency control
   const queue = [...SPECIES_WITH_FORMS];
-  const workers = 3;
+  const workers = 6;
 
   const worker = async () => {
     while (queue.length) {
@@ -88,7 +88,7 @@ export async function fetchAlternateForms(): Promise<FormInfo[]> {
       if (!speciesName) break;
 
       // Stagger to avoid bursts
-      await delay(120);
+      await delay(90);
 
       try {
         // 1) Species to get varieties and species id
@@ -111,7 +111,7 @@ export async function fetchAlternateForms(): Promise<FormInfo[]> {
           const pokeName = v?.pokemon?.name;
           if (!pokeName) continue;
 
-          await delay(80);
+          await delay(50);
 
           try {
             const pokemonData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${pokeName}`);
@@ -125,7 +125,7 @@ export async function fetchAlternateForms(): Promise<FormInfo[]> {
               const lf = fname.toLowerCase();
               if (lf.includes("-mega") || lf.includes("gigantamax") || lf.includes("-gmax")) continue;
 
-              await delay(60);
+              await delay(40);
               try {
                 const formData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-form/${fname}`);
                 const fid = Number(formData?.id ?? 0);
