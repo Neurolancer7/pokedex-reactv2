@@ -21,6 +21,7 @@ import { useEffect, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { genderDiffSpecies } from "@/lib/genderDiffSpecies";
 
 interface PokemonDetailModalProps {
   pokemon: Pokemon | null;
@@ -31,6 +32,7 @@ interface PokemonDetailModalProps {
   onNavigate?: (direction: "prev" | "next") => void;
   hasPrev?: boolean;
   hasNext?: boolean;
+  showGenderDifferences?: boolean;
 }
 
 export function PokemonDetailModal({
@@ -42,6 +44,7 @@ export function PokemonDetailModal({
   onNavigate,
   hasPrev,
   hasNext,
+  showGenderDifferences = false,
 }: PokemonDetailModalProps) {
   if (!pokemon) return null;
 
@@ -462,6 +465,56 @@ export function PokemonDetailModal({
     return found ? found.name : undefined;
   })();
 
+  const normalizeForWhitelist = (nm: string): string => {
+    const lower = nm.toLowerCase();
+    if (lower.endsWith("-mega-x")) return lower.slice(0, -7);
+    if (lower.endsWith("-mega-y")) return lower.slice(0, -7);
+    if (lower.endsWith("-mega")) return lower.slice(0, -5);
+    if (lower.endsWith("-gmax")) return lower.slice(0, -5);
+    if (lower.endsWith("-gigantamax")) return lower.slice(0, -"gigantamax".length - 1);
+    if (lower.endsWith("-male")) return lower.slice(0, -5);
+    if (lower.endsWith("-female")) return lower.slice(0, -7);
+    return lower;
+  };
+
+  const inGenderDiffWhitelist = (() => {
+    const nm = String((enhanced ?? pokemon)?.name ?? "").trim();
+    if (!nm) return false;
+    const normalized = normalizeForWhitelist(nm);
+    // genderDiffSpecies is already canonicalized; compare lowercased
+    return genderDiffSpecies.some((s) => s.toLowerCase() === normalized);
+  })();
+
+  useEffect(() => {
+    const run = async () => {
+      setGdLoading(false);
+      setGdError(null);
+      setGdText(null);
+      setGdSource(null);
+      if (!isOpen || !showGenderDifferences || !inGenderDiffWhitelist) return;
+
+      try {
+        setGdLoading(true);
+        const nm = String((enhanced ?? pokemon)?.name ?? "").toLowerCase();
+        const dexId = Number((enhanced ?? pokemon)?.pokemonId ?? pokemon?.pokemonId ?? 0);
+        if (!nm || !Number.isFinite(dexId) || dexId <= 0) {
+          setGdText("No known visual gender differences.");
+          return;
+        }
+        const res = await fetchGenderDifference({ name: normalizeForWhitelist(nm), dexId });
+        setGdText(res.description || "No known visual gender differences.");
+        setGdSource((res as any).sourceUrl || null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to load description";
+        setGdError(msg);
+      } finally {
+        setGdLoading(false);
+      }
+    };
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, showGenderDifferences, inGenderDiffWhitelist, (enhanced ?? pokemon)?.name, (enhanced ?? pokemon)?.pokemonId]);
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className={`max-w-2xl max-h-[90vh] p-0 ${isMega ? "ring-2 ring-fuchsia-500/30 shadow-lg shadow-fuchsia-500/20" : ""}`}>
@@ -835,6 +888,78 @@ export function PokemonDetailModal({
                     ))}
                   </div>
                 </div>
+
+                {/* Gender Differences (only when filter is active AND species in whitelist) */}
+                {showGenderDifferences && inGenderDiffWhitelist && (
+                  <div
+                    className={`p-4 rounded-lg border ${
+                      isGmax
+                        ? "bg-gradient-to-br from-purple-600/10 via-fuchsia-500/5 to-purple-700/10 border-purple-500/30"
+                        : isMega
+                        ? "bg-gradient-to-br from-fuchsia-600/10 via-pink-500/5 to-fuchsia-700/10 border-fuchsia-500/30"
+                        : "bg-muted/30"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
+                          alt=""
+                          className="h-4 w-4 opacity-70"
+                        />
+                        <h4 className="font-semibold">Gender Differences</h4>
+                      </div>
+                      {gdSource && (
+                        <a
+                          href={gdSource}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs underline text-muted-foreground hover:text-foreground"
+                          aria-label="Open Bulbapedia source"
+                        >
+                          Source
+                        </a>
+                      )}
+                    </div>
+
+                    {gdLoading && (
+                      <div className="w-full flex items-center justify-center py-3">
+                        <div className="h-10 w-10 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md flex items-center justify-center animate-pulse">
+                          <img
+                            src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
+                            alt="Loading Pokéball"
+                            className="h-7 w-7 animate-bounce-spin drop-shadow"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {!gdLoading && gdError && (
+                      <p className="text-sm text-muted-foreground">
+                        No known visual gender differences.
+                      </p>
+                    )}
+
+                    {!gdLoading && !gdError && (
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {gdText || "No known visual gender differences."}
+                      </p>
+                    )}
+
+                    <div className="mt-2 text-[11px] text-muted-foreground">
+                      Descriptions sourced from{" "}
+                      <a
+                        href={gdSource || "https://bulbapedia.bulbagarden.net/"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        Bulbapedia
+                      </a>
+                      .
+                    </div>
+                  </div>
+                )}
 
                 {/* Additional Info */}
                 {(data?.species) && (
