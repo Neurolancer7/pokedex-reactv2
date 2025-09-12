@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { POKEMON_TYPES, POKEMON_GENERATIONS } from "@/lib/pokemon-api";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface PokemonSearchProps {
   onSearch: (query: string) => void;
@@ -48,42 +49,67 @@ export function PokemonSearch({
 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
-      onSearch(localSearch);
+      try {
+        onSearch(localSearch);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Search failed";
+        toast.error(msg);
+      }
     }, 300);
 
     return () => clearTimeout(debounceTimer);
   }, [localSearch, onSearch]);
 
   const handleTypeToggle = (type: string) => {
-    const newTypes = selectedTypes.includes(type)
-      ? selectedTypes.filter(t => t !== type)
-      : [...selectedTypes, type];
-    
-    onFilterChange({
-      types: newTypes,
-      generation: selectedGeneration,
-      formCategory: selectedFormCategory,
-    });
+    try {
+      const newTypes = selectedTypes.includes(type)
+        ? selectedTypes.filter(t => t !== type)
+        : [...selectedTypes, type];
+      
+      onFilterChange({
+        types: newTypes,
+        generation: selectedGeneration,
+        formCategory: selectedFormCategory,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to update type filter";
+      toast.error(msg);
+    }
   };
 
   const handleGenerationChange = (generation: string) => {
-    onFilterChange({
-      types: selectedTypes,
-      generation: generation === "all" ? undefined : parseInt(generation),
-      formCategory: selectedFormCategory,
-    });
+    try {
+      onFilterChange({
+        types: selectedTypes,
+        generation: generation === "all" ? undefined : parseInt(generation),
+        formCategory: selectedFormCategory,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to update generation filter";
+      toast.error(msg);
+    }
   };
 
   const handleFormsChange = (value: string) => {
-    onFilterChange({
-      types: selectedTypes,
-      generation: selectedGeneration,
-      formCategory: value === "any" ? undefined : value,
-    });
+    try {
+      onFilterChange({
+        types: selectedTypes,
+        generation: selectedGeneration,
+        formCategory: value === "any" ? undefined : value,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to update forms filter";
+      toast.error(msg);
+    }
   };
 
   const clearFilters = () => {
-    onFilterChange({ types: [], generation: undefined, formCategory: undefined });
+    try {
+      onFilterChange({ types: [], generation: undefined, formCategory: undefined });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to clear filters";
+      toast.error(msg);
+    }
   };
 
   const hasActiveFilters = selectedTypes.length > 0 || selectedGeneration || selectedFormCategory;
