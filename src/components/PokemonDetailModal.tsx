@@ -45,6 +45,7 @@ export function PokemonDetailModal({
   const [enhanced, setEnhanced] = useState<Pokemon | null>(null);
   const [showShiny, setShowShiny] = useState(false);
   const [evolutionPreview, setEvolutionPreview] = useState<Array<{ name: string; sprite?: string; id?: number }>>([]);
+  const [baseFormPreview, setBaseFormPreview] = useState<{ name: string; sprite?: string; id?: number } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -286,6 +287,55 @@ export function PokemonDetailModal({
     };
   }, [enhanced?.species?.evolutionChainId]);
 
+  useEffect(() => {
+    const API = (import.meta as any)?.env?.VITE_POKEAPI_URL || "https://pokeapi.co/api/v2";
+    const nm = String((enhanced ?? pokemon)?.name ?? "").toLowerCase();
+
+    // Only proceed for Mega forms
+    const isMegaLocal = (() => {
+      if (!nm) return false;
+      return nm.includes("-mega");
+    })();
+
+    // Derive base species from Mega form name
+    const deriveBaseFromMega = (nameLower: string): string | null => {
+      if (!nameLower) return null;
+      if (nameLower.endsWith("-mega-x")) return nameLower.slice(0, -7);
+      if (nameLower.endsWith("-mega-y")) return nameLower.slice(0, -7);
+      if (nameLower.endsWith("-mega")) return nameLower.slice(0, -5);
+      // Fallback: if contains "-mega" anywhere, strip that suffix and anything after it
+      const idx = nameLower.indexOf("-mega");
+      if (idx > 0) return nameLower.slice(0, idx);
+      return null;
+    };
+
+    const baseName = deriveBaseFromMega(nm);
+    setBaseFormPreview(null);
+    if (!isMegaLocal || !baseName) return;
+
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch(`${API}/pokemon/${baseName}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const sprite: string | undefined =
+          data?.sprites?.other?.["official-artwork"]?.front_default ||
+          data?.sprites?.front_default ||
+          undefined;
+        const idNum: number | undefined = typeof data?.id === "number" ? data.id : undefined;
+        if (!mounted) return;
+        setBaseFormPreview({ name: baseName, sprite, id: idNum });
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [enhanced?.name, pokemon?.name]);
+
   const handleFavoriteClick = () => {
     onFavoriteToggle?.(pokemon.pokemonId);
   };
@@ -465,7 +515,7 @@ export function PokemonDetailModal({
 
             {/* Main Content */}
             <div className="grid md:grid-cols-2 gap-6">
-              {/* Left Column - Image and Basic Info */}
+              {/* Left Column */}
               <div className="space-y-4">
                 {/* Pokemon Image with Shiny toggle */}
                 <div className="relative">
@@ -595,7 +645,7 @@ export function PokemonDetailModal({
 
               {/* Right Column - Stats and Details */}
               <div className="space-y-6">
-                {/* Base Stats with total */}
+                {/* Base Stats */}
                 <div>
                   <h4 className="font-semibold mb-4 flex items-center gap-2">
                     <Activity className="h-4 w-4" />
@@ -670,6 +720,37 @@ export function PokemonDetailModal({
                           )}
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Base Form (for Mega evolutions) */}
+                {isMega && baseFormPreview && (
+                  <div>
+                    <h4 className="font-semibold mb-3">Base Form</h4>
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 h-16 rounded-full bg-muted/50 border flex items-center justify-center">
+                        {baseFormPreview.sprite ? (
+                          <img
+                            src={baseFormPreview.sprite}
+                            alt={baseFormPreview.name}
+                            className="w-12 h-12 object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="text-xs text-muted-foreground">No Img</div>
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <div className="text-sm font-medium capitalize">
+                          {formatPokemonName(baseFormPreview.name)}
+                        </div>
+                        {typeof baseFormPreview.id === "number" && (
+                          <div className="text-xs text-muted-foreground">
+                            #{formatPokemonId(baseFormPreview.id)}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
