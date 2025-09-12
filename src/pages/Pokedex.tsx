@@ -188,7 +188,8 @@ function gmaxToPokemon(g: GigantamaxPokemon): Pokemon {
 }
 
 async function buildPokemonFromFormName(fetcher: <T>(u: string) => Promise<T>, fname: string) {
-  // Add: resolve via pokemon endpoint first, then fallback to pokemon-form -> pokemon, then species default variety
+  // Add: resolve via species default variety first to avoid 404s on base species names (e.g., "toxtricity"),
+  // then fallback to direct pokemon endpoint, then pokemon-form -> pokemon
   const tryFetchPokemon = async (name: string): Promise<any> => {
     return await fetcher<any>(`https://pokeapi.co/api/v2/pokemon/${name}`);
   };
@@ -198,7 +199,7 @@ async function buildPokemonFromFormName(fetcher: <T>(u: string) => Promise<T>, f
     if (!pUrl) throw new Error("Missing pokemon url from form");
     return await fetcher<any>(pUrl);
   };
-  // New: resolve base through species -> default variety -> pokemon
+  // Resolve base through species -> default variety -> pokemon
   const tryFetchViaSpecies = async (nameOrSpecies: string): Promise<any> => {
     const speciesJson = await fetcher<any>(`https://pokeapi.co/api/v2/pokemon-species/${nameOrSpecies}`);
     const varieties: Array<{ is_default?: boolean; pokemon?: { name?: string; url?: string } }> =
@@ -212,13 +213,15 @@ async function buildPokemonFromFormName(fetcher: <T>(u: string) => Promise<T>, f
 
   let pokemonJson: any = null;
   try {
-    pokemonJson = await tryFetchPokemon(fname);
+    // 1) Species (default variety) — avoids 404s for species names lacking a direct pokemon entry
+    pokemonJson = await tryFetchViaSpecies(fname);
   } catch {
     try {
-      pokemonJson = await tryFetchViaForm(fname);
+      // 2) Direct pokemon by name
+      pokemonJson = await tryFetchPokemon(fname);
     } catch {
-      // Final fallback: species -> default variety -> pokemon (handles names like "toxtricity")
-      pokemonJson = await tryFetchViaSpecies(fname);
+      // 3) Fallback via pokemon-form -> pokemon
+      pokemonJson = await tryFetchViaForm(fname);
     }
   }
 
