@@ -50,7 +50,6 @@ export function PokemonDetailModal({
   const [evolutionPreview, setEvolutionPreview] = useState<Array<{ name: string; sprite?: string; id?: number }>>([]);
   const [baseFormPreview, setBaseFormPreview] = useState<{ name: string; sprite?: string; id?: number } | null>(null);
 
-  // Gender Differences state
   const fetchGenderDifference = useAction(api.genderDiffActions.fetchGenderDifference);
   const [gdLoading, setGdLoading] = useState(false);
   const [gdError, setGdError] = useState<string | null>(null);
@@ -345,42 +344,6 @@ export function PokemonDetailModal({
       mounted = false;
     };
   }, [enhanced?.name, pokemon?.name]);
-
-  // Load Gender Differences (Bulbapedia) when modal opens and pokemon changes
-  useEffect(() => {
-    let mounted = true;
-
-    const run = async () => {
-      if (!isOpen || !pokemon) {
-        setGdLoading(false);
-        setGdError(null);
-        setGdText(null);
-        setGdSource(null);
-        return;
-      }
-      try {
-        setGdLoading(true);
-        setGdError(null);
-        setGdText(null);
-        setGdSource(null);
-
-        const res = await fetchGenderDifference({ name: String(pokemon.name).toLowerCase(), dexId: Number(pokemon.pokemonId) });
-        if (!mounted) return;
-        setGdText((res as any)?.description || null);
-        setGdSource((res as any)?.sourceUrl || null);
-      } catch (e) {
-        if (!mounted) return;
-        const msg = e instanceof Error ? e.message : "Failed to load gender differences";
-        setGdError(msg);
-      } finally {
-        if (!mounted) return;
-        setGdLoading(false);
-      }
-    };
-
-    run();
-    return () => { mounted = false; };
-  }, [isOpen, pokemon?.name, pokemon?.pokemonId, fetchGenderDifference]);
 
   const handleFavoriteClick = () => {
     onFavoriteToggle?.(pokemon.pokemonId);
@@ -936,71 +899,6 @@ export function PokemonDetailModal({
                     )}
                   </div>
                 )}
-
-                {/* Gender Differences (Bulbapedia) */}
-                <div className="p-4 rounded-lg border bg-gradient-to-br from-pink-500/5 via-transparent to-purple-500/5">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold flex items-center gap-2">
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-pink-500/20 text-pink-600 border border-pink-500/30">♀</span>
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-500/20 text-blue-600 border border-blue-500/30">♂</span>
-                      Gender Differences
-                    </h4>
-                    {gdSource && (
-                      <Button asChild variant="outline" size="sm" className="h-7 px-2">
-                        <a href={gdSource} target="_blank" rel="noreferrer" aria-label="Open Bulbapedia">
-                          <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                          Source
-                        </a>
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Loading */}
-                  {gdLoading && (
-                    <div className="w-full flex items-center justify-center py-2" aria-busy="true" aria-live="polite">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <img
-                          src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
-                          alt="Loading Pokéball"
-                          className="h-5 w-5 animate-bounce"
-                        />
-                        <span>Loading…</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Error */}
-                  {gdError && !gdLoading && (
-                    <p className="text-sm text-muted-foreground">
-                      {gdError}
-                    </p>
-                  )}
-
-                  {/* Description */}
-                  {!gdLoading && !gdError && (
-                    <p className={`text-sm leading-relaxed ${gdText ? "text-muted-foreground" : "text-muted-foreground italic"}`}>
-                      {gdText || "No known visual gender differences."}
-                    </p>
-                  )}
-
-                  {/* Attribution */}
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    Descriptions sourced from{" "}
-                    {gdSource ? (
-                      <a
-                        href={gdSource}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline underline-offset-2 hover:text-foreground"
-                      >
-                        Bulbapedia
-                      </a>
-                    ) : (
-                      <span>Bulbapedia</span>
-                    )}
-                    .
-                  </div>
-                </div>
               </div>
             </div>
           </div>
