@@ -107,6 +107,32 @@ export function useGenderDiffPokemon(speciesNames: string[]): HookResult {
     setIsLoading(true);
     setError(null);
 
+    // Helper: fetch a pokemon by name with a species fallback to default variety on 404
+    const fetchPokemonWithFallback = async (name: string, signal?: AbortSignal) => {
+      try {
+        // Try direct
+        return await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${name}`, signal, 4, 250);
+      } catch (err) {
+        // If direct fails (commonly 404 for species like "toxtricity"), resolve default variety via species
+        const msg = err instanceof Error ? err.message : String(err);
+        const is404 = /HTTP\s*404/i.test(msg);
+        if (!is404) throw err;
+
+        // Fetch species to find default variety name
+        const species = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${name}`, signal, 4, 250);
+        const varieties: any[] = Array.isArray(species?.varieties) ? species.varieties : [];
+        const def = varieties.find(v => v?.is_default && v?.pokemon?.name)?.pokemon?.name
+          || varieties[0]?.pokemon?.name;
+
+        if (!def || typeof def !== "string") {
+          throw new Error(`HTTP 404 for ${name} and no default variety`);
+        }
+
+        // Fetch the default variety pokemon
+        return await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${def}`, signal, 4, 250);
+      }
+    };
+
     try {
       // Try cache first
       const cachedRaw = localStorage.getItem(cacheKey);
@@ -128,7 +154,7 @@ export function useGenderDiffPokemon(speciesNames: string[]): HookResult {
         speciesNames.map((n) => n.toLowerCase().trim()),
         6, // concurrency limit
         async (name) => {
-          const p = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${name}`, ctrl.signal, 4, 250);
+          const p = await fetchPokemonWithFallback(name, ctrl.signal);
           return p;
         }
       );
