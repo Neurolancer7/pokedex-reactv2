@@ -607,6 +607,16 @@ export function PokemonDetailModal({
   })();
 
   const typesSafe: string[] = Array.isArray(data?.types) ? data!.types : [];
+  // Add: derive a primary theme color from the first type (fallback to Tailwind blue)
+  const primaryTypeColor: string = (() => {
+    const t = typesSafe[0];
+    try {
+      return t ? getTypeColor(t) : "#3b82f6";
+    } catch {
+      return "#3b82f6";
+    }
+  })();
+
   const statsSafe: Array<{ name: string; baseStat: number; effort: number }> =
     Array.isArray((data as any)?.stats)
       ? (data as any).stats.map((s: any) => ({
@@ -688,7 +698,11 @@ export function PokemonDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`max-w-2xl max-h-[90vh] p-0 ${isMega ? "ring-2 ring-fuchsia-500/30 shadow-lg shadow-fuchsia-500/20" : ""}`}>
+      <DialogContent
+        className={`max-w-3xl max-h-[90vh] p-0 rounded-xl border-2 ${isMega ? "ring-2 ring-fuchsia-500/30 shadow-lg shadow-fuchsia-500/20" : ""}`}
+        // Add subtle themed border/glow using primary type color (only adds when not Mega)
+        style={!isMega ? { borderColor: primaryTypeColor + "33", boxShadow: `0 10px 30px ${primaryTypeColor}22` } : undefined}
+      >
         <ScrollArea className="max-h-[90vh]">
           <div className="p-6">
             {/* Header */}
@@ -765,8 +779,10 @@ export function PokemonDetailModal({
                         ? "bg-gradient-to-br from-purple-600/15 via-fuchsia-500/10 to-purple-700/15 ring-2 ring-purple-500/30 shadow-lg shadow-purple-500/20"
                         : isMega
                           ? "bg-gradient-to-br from-fuchsia-600/15 via-pink-500/10 to-fuchsia-700/15 ring-2 ring-fuchsia-500/30 shadow-lg shadow-fuchsia-500/20"
-                          : "bg-gradient-to-br from-muted/50 to-muted"}
+                          : "bg-gradient-to-br from-muted/50 to-muted border-2"}
                     `}
+                    // Themed ring and shadow for non Mega/G-Max
+                    style={!isGmax && !isMega ? { borderColor: primaryTypeColor + "33", boxShadow: `0 8px 24px ${primaryTypeColor}22` } : undefined}
                   >
                     {currentSprite ? (
                       <motion.img
