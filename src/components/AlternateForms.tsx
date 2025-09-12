@@ -5,13 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowUpDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-export interface FormInfo {
-  speciesName: string;
-  speciesId: number;
-  forms: { formName: string; formId: number }[];
-}
-
-type SortKey = "speciesName" | "speciesId" | "formsCount";
+import { fetchAlternateForms, type FormInfo } from "@/lib/alternateForms";
 
 const SPECIES_WITH_FORMS: string[] = [
   "pichu","unown","castform","kyogre","groudon","deoxys","burmy","wormadam",
@@ -27,6 +21,8 @@ const SPECIES_WITH_FORMS: string[] = [
   "tatsugiri","dudunsparce","gimmighoul","poltchageist","sinistcha","ogerpon",
   "terapagos"
 ];
+
+type SortKey = "speciesId" | "speciesName" | "formsCount";
 
 const CACHE_KEY = "alternateForms:v1";
 
@@ -65,124 +61,6 @@ async function fetchJsonWithRetry<T>(url: string, attempts = 3, baseDelayMs = 25
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(`Failed to fetch ${url}`);
-}
-
-/**
- * Fetch all alternate forms for provided species list.
- * - Uses species -> varieties -> pokemon -> forms -> pokemon-form detail to collect form ids and names.
- * - Applies gentle rate limiting.
- * - Caches to localStorage.
- */
-async function fetchAlternateForms(): Promise<FormInfo[]> {
-  // Use cache
-  try {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed)) return parsed as FormInfo[];
-    }
-  } catch {
-    // ignore cache errors
-  }
-
-  const results: FormInfo[] = [];
-  const seenSpecies = new Set<string>();
-
-  // Concurrency control
-  const queue = [...SPECIES_WITH_FORMS];
-  const workers = 3;
-  const worker = async () => {
-    while (queue.length) {
-      const speciesName = queue.shift();
-      if (!speciesName) break;
-
-      // Slight stagger to avoid bursts
-      await delay(120);
-
-      try {
-        // 1) species -> to get varieties and the species id
-        const speciesData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${speciesName}`);
-        const speciesId: number = Number(speciesData?.id ?? 0);
-
-        // 2) varieties (each variety references a pokemon)
-        const varieties: Array<{ pokemon: { name: string, url: string } }> = Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
-        const formEntries: { formName: string; formId: number }[] = [];
-        const formIdSet = new Set<number>();
-
-        // 3) For each variety: fetch pokemon data -> read .forms[] and fetch pokemon-form details
-        for (const v of varieties) {
-          const pokeName = v?.pokemon?.name;
-          if (!pokeName) continue;
-
-          // Small pacing
-          await delay(80);
-
-          try {
-            const pokemonData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${pokeName}`);
-            const forms: Array<{ name: string; url: string }> = Array.isArray(pokemonData?.forms) ? pokemonData.forms : [];
-
-            for (const f of forms) {
-              const fname = f?.name;
-              if (!fname) continue;
-
-              // Another light pacing
-              await delay(60);
-
-              try {
-                // Fetch pokemon-form entry to get form id
-                const formData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-form/${fname}`);
-                const fid = Number(formData?.id ?? 0);
-                if (Number.isFinite(fid) && fid > 0 && !formIdSet.has(fid)) {
-                  formIdSet.add(fid);
-                  formEntries.push({ formName: String(formData?.name ?? fname), formId: fid });
-                }
-              } catch (err) {
-                // Non-fatal; continue with next form
-                // console.warn("form fetch failed for", fname, err);
-              }
-            }
-          } catch (err) {
-            // Non-fatal; continue with next variety
-            // console.warn("pokemon fetch failed for", pokeName, err);
-          }
-        }
-
-        // Deduplicate species entries
-        const normalizedSpeciesName = String(speciesName).toLowerCase();
-        if (!seenSpecies.has(normalizedSpeciesName)) {
-          seenSpecies.add(normalizedSpeciesName);
-          results.push({
-            speciesName: normalizedSpeciesName,
-            speciesId: speciesId,
-            forms: formEntries.sort((a, b) => a.formId - b.formId),
-          });
-        }
-      } catch (err) {
-        // Non-fatal; push an empty entry to indicate species processed with no forms
-        results.push({
-          speciesName: String(speciesName).toLowerCase(),
-          speciesId: 0,
-          forms: [],
-        });
-      }
-    }
-  };
-
-  await Promise.all(Array.from({ length: workers }, () => worker()));
-
-  // Sort results by speciesId then name
-  results.sort((a, b) => {
-    if (a.speciesId && b.speciesId && a.speciesId !== b.speciesId) return a.speciesId - b.speciesId;
-    return a.speciesName.localeCompare(b.speciesName);
-  });
-
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(results));
-  } catch {
-    // ignore cache write errors
-  }
-
-  return results;
 }
 
 export function AlternateForms() {

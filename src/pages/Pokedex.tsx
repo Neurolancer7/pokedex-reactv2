@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 import type { Pokemon } from "@/lib/pokemon-api";
 import { fetchGigantamaxList, type GigantamaxPokemon } from "@/lib/gigantamax";
+import { fetchAlternateForms, type FormInfo } from "@/lib/alternateForms";
 
 class ErrorBoundary extends React.Component<{ onRetry: () => void; children: React.ReactNode }, { hasError: boolean; errorMessage?: string }> {
   constructor(props: { onRetry: () => void; children: React.ReactNode }) {
@@ -114,6 +115,44 @@ function gmaxToPokemon(g: GigantamaxPokemon): Pokemon {
     generation: 0,
     species: undefined,
   };
+}
+
+async function buildPokemonFromFormName(fetcher: <T>(u: string) => Promise<T>, fname: string) {
+  const pokemonJson: any = await fetcher<any>(`https://pokeapi.co/api/v2/pokemon/${fname}`);
+  const id: number = Number(pokemonJson?.id ?? 0);
+  const types: string[] = Array.isArray(pokemonJson?.types)
+    ? pokemonJson.types.map((t: any) => String(t?.type?.name ?? "")).filter(Boolean)
+    : [];
+  const abilities: string[] = Array.isArray(pokemonJson?.abilities)
+    ? pokemonJson.abilities.map((a: any) => String(a?.ability?.name ?? "")).filter(Boolean)
+    : [];
+  const height: number = typeof pokemonJson?.height === "number" ? pokemonJson.height : 0;
+  const weight: number = typeof pokemonJson?.weight === "number" ? pokemonJson.weight : 0;
+  const official =
+    pokemonJson?.sprites?.other?.["official-artwork"]?.front_default ??
+    (id > 0
+      ? `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`
+      : undefined);
+
+  const p: Pokemon = {
+    pokemonId: id || 0,
+    name: String(pokemonJson?.name ?? fname),
+    height,
+    weight,
+    baseExperience: undefined,
+    types,
+    abilities: abilities.map((a) => ({ name: a, isHidden: false })),
+    stats: [],
+    sprites: {
+      frontDefault: undefined,
+      frontShiny: undefined,
+      officialArtwork: official,
+    },
+    moves: [],
+    generation: 0,
+    species: undefined,
+  };
+  return p;
 }
 
 export default function Pokedex() {
@@ -474,9 +513,85 @@ export default function Pokedex() {
     };
   }, [selectedRegion, selectedFormCategory]);
 
+  // Add: Effect to fetch and populate alternate forms when filter is active
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      // Only fetch when the 'alternate' forms filter is active
+      if (selectedFormCategory !== "alternate") {
+        setAltList([]);
+        setAltHasMore(false);
+        setAltLoading(false);
+        return;
+      }
+      try {
+        setAltLoading(true);
+        // Reuse existing retry helper for robustness
+        const forms: FormInfo[] = await runWithRetries(() => fetchAlternateForms(), 5, 500);
+
+        // Flatten all form names, excluding any accidental mega/gmax (already excluded in fetchAlternateForms)
+        const names: string[] = [];
+        for (const row of forms) {
+          for (const f of row.forms) {
+            if (!f.formName) continue;
+            const n = String(f.formName).toLowerCase();
+            if (n.includes("-mega") || n.includes("gigantamax") || n.includes("-gmax")) continue;
+            names.push(n);
+          }
+        }
+
+        // Deduplicate
+        const uniq = Array.from(new Set(names));
+
+        // Map to Pokemon entries by fetching /pokemon/{formName} in small batches
+        const batchSize = 8;
+        const out: Pokemon[] = [];
+        for (let i = 0; i < uniq.length; i += batchSize) {
+          const batch = uniq.slice(i, i + batchSize);
+          const cards = await Promise.all(
+            batch.map(async (fname) => {
+              try {
+                const p = await buildPokemonFromFormName(fetchJsonWithRetry, fname);
+                return p;
+              } catch {
+                return null;
+              }
+            })
+          );
+          for (const p of cards) if (p) out.push(p);
+          if (cancelled) break;
+        }
+
+        // Sort by national dex id then name for stability
+        out.sort((a, b) => a.pokemonId - b.pokemonId || a.name.localeCompare(b.name));
+
+        if (!cancelled) {
+          setAltList(out);
+          setAltHasMore(false);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to load alternate forms";
+        toast.error(msg);
+        if (!cancelled) {
+          setAltList([]);
+          setAltHasMore(false);
+        }
+      } finally {
+        if (!cancelled) setAltLoading(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFormCategory]);
+
   // Client-side filtering for search and types; switch dataset by forms filter
   const sourceList = selectedFormCategory === "mega" ? megaList
                     : selectedFormCategory === "gigantamax" ? gmaxList
+                    : selectedFormCategory === "alternate" ? altList
                     : masterList;
 
   const filteredList = sourceList.filter((p) => {
@@ -795,6 +910,8 @@ export default function Pokedex() {
                   ? megaLoading
                   : selectedFormCategory === "gigantamax"
                   ? gmaxLoading
+                  : selectedFormCategory === "alternate"
+                  ? altLoading
                   : loadingMaster
               }
             />
