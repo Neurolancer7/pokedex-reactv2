@@ -88,21 +88,18 @@ export default function Pokedex() {
   
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [selectedGeneration, setSelectedGeneration] = useState<number>();
   const [selectedFormCategory, setSelectedFormCategory] = useState<string | undefined>(undefined);
   const [showFavorites, setShowFavorites] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Infinite scroll state
-  const BATCH_LIMIT = 30; // changed from 20 -> 30
+  const BATCH_LIMIT = 30;
   const [offset, setOffset] = useState(0);
   const [items, setItems] = useState<any[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   // Add ref to ensure auto-fetch only triggers once
   const autoFetchRef = useRef(false);
-  // Track generations we've already attempted to fetch to avoid repeated calls
-  const fetchedGenRef = useRef<Set<number>>(new Set());
   // Track form categories we've attempted to fetch
   const fetchedFormCategoryRef = useRef<Set<string>>(new Set());
 
@@ -117,19 +114,6 @@ export default function Pokedex() {
   const [megaLoading, setMegaLoading] = useState(false);
   // Add: visible count for Mega (default 30)
   const [megaVisibleCount, setMegaVisibleCount] = useState(30);
-
-  // Generation ID ranges used to auto-fetch when a region is selected but uncached
-  const GEN_RANGES: Record<number, { start: number; end: number }> = {
-    1: { start: 1, end: 151 },
-    2: { start: 152, end: 251 },
-    3: { start: 252, end: 386 },
-    4: { start: 387, end: 493 },
-    5: { start: 494, end: 649 },
-    6: { start: 650, end: 721 },
-    7: { start: 722, end: 809 },
-    8: { start: 810, end: 905 },
-    9: { start: 906, end: 1025 },
-  };
 
   const INITIAL_LIMIT = 1025; // Show all; removes need for pagination
 
@@ -326,33 +310,6 @@ export default function Pokedex() {
     "altaria","banette","absol","latias","latios","rayquaza","lopunny","gallade","audino","diancie"
   ];
 
-  // Add: Fetch Mega evolutions for a species by scanning its varieties' pokemon that include "mega"
-  const fetchMegasForSpecies = async (speciesName: string): Promise<Pokemon[]> => {
-    try {
-      const speciesData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${speciesName}`);
-      const varieties: Array<{ pokemon: { name: string; url: string } }> =
-        Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
-
-      const settled = await Promise.allSettled(
-        varieties
-          .map((v) => v?.pokemon?.name)
-          .filter((n): n is string => !!n)
-          // Only fetch varieties that look like Mega forms by name
-          .filter((n) => n.includes("mega"))
-          .map(async (pokeName) => {
-            const p = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${pokeName}`);
-            return buildPokemonFromEntry(p);
-          })
-      );
-
-      const out: Pokemon[] = [];
-      for (const r of settled) if (r.status === "fulfilled") out.push(r.value);
-      return out;
-    } catch {
-      return [];
-    }
-  };
-
   // Add: When switching into Mega Evolutions filter, clear current list and load only the requested megas
   useEffect(() => {
     if (selectedFormCategory === "mega") {
@@ -395,6 +352,9 @@ export default function Pokedex() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFormCategory]);
+
+  // Add: Clear cache on mount
+  const clearCache = useConvexMutation(api.pokemon.clearCache);
 
   // When switching into Alternate Forms filter, reset local queue and list, and load exactly 30 by default with token
   useEffect(() => {
@@ -491,6 +451,33 @@ export default function Pokedex() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFormCategory]);
 
+  // Add: When switching into Mega Evolutions filter, clear current list and load only the requested megas
+  const fetchMegasForSpecies = async (speciesName: string): Promise<Pokemon[]> => {
+    try {
+      const speciesData = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon-species/${speciesName}`);
+      const varieties: Array<{ pokemon: { name: string; url: string } }> =
+        Array.isArray(speciesData?.varieties) ? speciesData.varieties : [];
+
+      const settled = await Promise.allSettled(
+        varieties
+          .map((v) => v?.pokemon?.name)
+          .filter((n): n is string => !!n)
+          // Only fetch varieties that look like Mega forms by name
+          .filter((n) => n.includes("mega"))
+          .map(async (pokeName) => {
+            const p = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${pokeName}`);
+            return buildPokemonFromEntry(p);
+          })
+      );
+
+      const out: Pokemon[] = [];
+      for (const r of settled) if (r.status === "fulfilled") out.push(r.value);
+      return out;
+    } catch {
+      return [];
+    }
+  };
+
   const pokemonData = useConvexQuery(
     api.pokemon.list,
     selectedFormCategory === "gender-diff"
@@ -500,7 +487,6 @@ export default function Pokedex() {
           offset: showFavorites ? 0 : offset,
           search: searchQuery || undefined,
           types: selectedTypes.length > 0 ? selectedTypes : undefined,
-          generation: selectedFormCategory === "regional" ? undefined : selectedGeneration,
           forms: selectedFormCategory ? [selectedFormCategory] : undefined,
         }
   );
@@ -514,7 +500,6 @@ export default function Pokedex() {
           offset: showFavorites ? 0 : offset + BATCH_LIMIT,
           search: searchQuery || undefined,
           types: selectedTypes.length > 0 ? selectedTypes : undefined,
-          generation: selectedFormCategory === "regional" ? undefined : selectedGeneration,
           forms: selectedFormCategory ? [selectedFormCategory] : undefined,
         }
   );
@@ -527,11 +512,10 @@ export default function Pokedex() {
   const addToFavorites = useConvexMutation(api.pokemon.addToFavorites);
   const removeFromFavorites = useConvexMutation(api.pokemon.removeFromFavorites);
   const fetchPokemonData = useAction(api.pokemonData.fetchAndCachePokemon);
-  const clearCache = useConvexMutation(api.pokemon.clearCache);
 
-  // Purge all regional dex cache entries (Kanto -> Paldea) on page load
+  // On page load: purge all cached data (pokemon, species, forms, regional, gender)
   useEffect(() => {
-    void clearCache({ scopes: ["regional"] });
+    void clearCache({ scopes: ["pokemon", "species", "forms", "regional", "gender"] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -555,7 +539,7 @@ export default function Pokedex() {
     setSearchQuery(query);
   };
 
-  const handleFilterChange = (filters: { types: string[]; generation?: number; formCategory?: string }) => {
+  const handleFilterChange = (filters: { types: string[]; formCategory?: string }) => {
     // Immediately reset pagination on filter changes to avoid race conditions
     setItems([]);
     setOffset(0);
@@ -563,7 +547,6 @@ export default function Pokedex() {
     setIsLoadingMore(false);
 
     setSelectedTypes(filters.types);
-    setSelectedGeneration(filters.generation);
     setSelectedFormCategory(filters.formCategory);
   };
 
@@ -692,52 +675,6 @@ export default function Pokedex() {
       setIsRefreshing(false);
     });
   }, [pokemonData, showFavorites, fetchPokemonData]);
-
-  // Auto-fetch the selected generation if it's incomplete (ensures missing IDs like #180/#181/#195 are cached)
-  useEffect(() => {
-    if (showFavorites) return;                // skip in favorites view
-    if (selectedFormCategory === "regional") return; // skip gen backfill in regional filter
-    if (!selectedGeneration) return;          // only when a generation is chosen
-    if (isRefreshing) return;                 // avoid overlapping fetches
-
-    const range = GEN_RANGES[selectedGeneration];
-    if (!range) return;
-
-    const expectedCount = range.end - range.start + 1;
-    const currentTotal = pokemonData?.total ?? 0;
-
-    // If the current dataset for this filter is already complete, skip
-    if (currentTotal >= expectedCount) return;
-
-    setIsRefreshing(true);
-
-    const promise = runWithRetries(() =>
-      fetchPokemonData({
-        limit: expectedCount,
-        offset: range.start - 1,
-      })
-    );
-
-    toast.promise(promise, {
-      loading: `Fetching Generation ${selectedGeneration} Pokémon...`,
-      success: (data) => {
-        const count = (data as any)?.cached ?? 0;
-        return `Loaded ${count} Pokémon for Generation ${selectedGeneration}.`;
-      },
-      error: (err) => (err instanceof Error ? err.message : "Failed to load generation data"),
-    });
-
-    promise.finally(() => {
-      setIsRefreshing(false);
-    });
-  }, [
-    selectedGeneration,
-    selectedFormCategory,
-    showFavorites,
-    fetchPokemonData,
-    isRefreshing,
-    pokemonData?.total,
-  ]);
 
   // Auto-fetch full dataset if a Forms category is selected and results are empty (ensures form tags exist)
   useEffect(() => {
@@ -872,6 +809,13 @@ export default function Pokedex() {
     isRefreshing,
     fetchPokemonData,
     infiniteEnabled,
+    altHasMore,
+    altLoading,
+    altList.length,
+    megaList.length,
+    megaVisibleCount,
+    gmaxList.length,
+    gmaxVisibleCount,
   ]);
 
   useEffect(() => {
@@ -880,7 +824,7 @@ export default function Pokedex() {
     setHasMore(true);
     setIsLoadingMore(false);
     setInfiniteEnabled(false); // require manual "Load More" again after any filter change
-  }, [searchQuery, selectedGeneration, showFavorites, selectedTypes.join(","), selectedFormCategory || ""]);
+  }, [searchQuery, showFavorites, selectedTypes.join(","), selectedFormCategory || ""]);
 
   // Append new page results
   useEffect(() => {
@@ -921,13 +865,6 @@ export default function Pokedex() {
                 // Default: list or favorites, enforce generation range if selected
                 const base = showFavorites ? (favorites || []) : items;
                 let arr = [...base];
-
-                if (selectedGeneration) {
-                  const range = GEN_RANGES[selectedGeneration];
-                  if (range) {
-                    arr = arr.filter((p) => p.pokemonId >= range.start && p.pokemonId <= range.end);
-                  }
-                }
 
                 return arr.sort((a, b) => a.pokemonId - b.pokemonId);
               })()
@@ -995,7 +932,6 @@ export default function Pokedex() {
                 onFilterChange={handleFilterChange}
                 searchQuery={searchQuery}
                 selectedTypes={selectedTypes}
-                selectedGeneration={selectedGeneration}
                 selectedFormCategory={selectedFormCategory}
               />
             </motion.div>
@@ -1080,9 +1016,8 @@ export default function Pokedex() {
               <GenderDiffGrid />
             ) : (
               <PokemonGrid
-                key={`${
-                  selectedFormCategory === "alternate" ? "alt" : (showFavorites ? "fav" : "infinite")
-                }-${selectedGeneration ?? "all"}-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
+                key={`${selectedFormCategory === "alternate" ? "alt" : (showFavorites ? "fav" : "infinite")
+                }-${selectedTypes.join(",")}-${searchQuery}-${selectedFormCategory ?? "all"}`}
                 pokemon={displayPokemon as unknown as Pokemon[]}
                 favorites={favoriteIds}
                 onFavoriteToggle={handleFavoriteToggle}

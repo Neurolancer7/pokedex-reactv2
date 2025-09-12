@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { POKEMON_TYPES, POKEMON_GENERATIONS } from "@/lib/pokemon-api";
+import { POKEMON_TYPES } from "@/lib/pokemon-api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -24,12 +24,10 @@ interface PokemonSearchProps {
   onSearch: (query: string) => void;
   onFilterChange: (filters: {
     types: string[];
-    generation?: number;
     formCategory?: string;
   }) => void;
   searchQuery: string;
   selectedTypes: string[];
-  selectedGeneration?: number;
   selectedFormCategory?: string;
 }
 
@@ -38,13 +36,11 @@ export function PokemonSearch({
   onFilterChange,
   searchQuery,
   selectedTypes,
-  selectedGeneration,
   selectedFormCategory,
 }: PokemonSearchProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
 
   const hasTypesActive = selectedTypes.length > 0;
-  const hasGenActive = typeof selectedGeneration === "number";
   const hasFormActive = !!selectedFormCategory && selectedFormCategory !== "any";
 
   useEffect(() => {
@@ -68,7 +64,6 @@ export function PokemonSearch({
       
       onFilterChange({
         types: newTypes,
-        generation: selectedGeneration,
         formCategory: selectedFormCategory,
       });
     } catch (err) {
@@ -77,24 +72,10 @@ export function PokemonSearch({
     }
   };
 
-  const handleGenerationChange = (generation: string) => {
-    try {
-      onFilterChange({
-        types: selectedTypes,
-        generation: generation === "all" ? undefined : parseInt(generation),
-        formCategory: selectedFormCategory,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to update generation filter";
-      toast.error(msg);
-    }
-  };
-
   const handleFormsChange = (value: string) => {
     try {
       onFilterChange({
         types: selectedTypes,
-        generation: selectedGeneration,
         formCategory: value === "any" ? undefined : value,
       });
     } catch (err) {
@@ -105,14 +86,14 @@ export function PokemonSearch({
 
   const clearFilters = () => {
     try {
-      onFilterChange({ types: [], generation: undefined, formCategory: undefined });
+      onFilterChange({ types: [], formCategory: undefined });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to clear filters";
       toast.error(msg);
     }
   };
 
-  const hasActiveFilters = selectedTypes.length > 0 || selectedGeneration || selectedFormCategory;
+  const hasActiveFilters = selectedTypes.length > 0 || selectedFormCategory;
 
   const FORM_OPTIONS: Array<{ value: string; label: string }> = [
     { value: "alternate", label: "Alternate Forms" },
@@ -136,32 +117,6 @@ export function PokemonSearch({
 
       {/* Filters */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
-        {/* Generation Filter */}
-        <div className="shrink-0">
-          <Select
-            value={selectedGeneration?.toString() || "all"}
-            onValueChange={handleGenerationChange}
-          >
-            <SelectTrigger
-              className={cn(
-                "w-36 sm:w-44",
-                hasGenActive &&
-                  "border-primary/50 ring-2 ring-primary/30 bg-primary/5"
-              )}
-            >
-              <SelectValue placeholder="Generation" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Generations</SelectItem>
-              {POKEMON_GENERATIONS.map((gen) => (
-                <SelectItem key={gen.id} value={gen.id.toString()}>
-                  {gen.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         {/* Type Filter */}
         <Popover>
           <PopoverTrigger asChild>
