@@ -8,6 +8,7 @@ import { RotateCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { ExternalLink } from "lucide-react";
 
 type Props = {
   species?: string[];
@@ -328,6 +329,58 @@ export function GenderDiffGrid({ species }: Props) {
                   />
                 )}
               </div>
+            </div>
+
+            {/* Gender Differences description (shown only in this filtered modal) */}
+            <div className="mt-5 p-4 rounded-lg border bg-gradient-to-br from-pink-500/5 to-purple-500/5">
+              <div className="mb-2 text-sm font-semibold">Gender Differences</div>
+
+              {/* Loading state */}
+              {descLoading && (
+                <div className="w-full flex items-center justify-center py-3" aria-busy="true" aria-live="polite">
+                  <div className="px-4 h-10 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow border border-white/10 flex items-center justify-center">
+                    <div className="h-8 w-8 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow flex items-center justify-center animate-pulse">
+                      <img
+                        src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
+                        alt="Loading Pokéball"
+                        className="h-6 w-6 animate-bounce-spin drop-shadow"
+                      />
+                    </div>
+                    <span className="ml-2 text-xs">Loading gender differences…</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Error state */}
+              {!descLoading && descError && (
+                <Alert className="mt-2">
+                  <AlertDescription className="text-sm">{descError}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Description or fallback */}
+              {!descLoading && !descError && (
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {descText || "No known visual gender differences."}
+                </p>
+              )}
+
+              {/* Attribution */}
+              {!descLoading && (
+                <div className="mt-3 text-xs text-muted-foreground flex items-center gap-2">
+                  <span>Descriptions sourced from Bulbapedia</span>
+                  {descSource && (
+                    <a
+                      href={descSource}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 underline hover:text-foreground"
+                    >
+                      Source <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>
