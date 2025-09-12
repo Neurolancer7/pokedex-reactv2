@@ -62,6 +62,9 @@ export function PokemonDetailModal({
 }: PokemonDetailModalProps) {
   if (!pokemon) return null;
 
+  // Disable loading of extras like evolution chain + base form previews when viewing details (keeps the view focused)
+  const LOAD_EXTRAS = false;
+
   const [enhanced, setEnhanced] = useState<Pokemon | null>(null);
   const [showShiny, setShowShiny] = useState(false);
   const [evolutionPreview, setEvolutionPreview] = useState<Array<{ name: string; sprite?: string; id?: number }>>([]);
@@ -256,7 +259,6 @@ export function PokemonDetailModal({
         species = await tryFetchSpecies(pokemonNameForSpecies);
 
         if (!mounted) return;
-
         setEnhanced(normalize(pokemon, detail ?? {}, species ?? {}));
       } catch {
       }
@@ -268,6 +270,7 @@ export function PokemonDetailModal({
   }, [pokemon]);
 
   useEffect(() => {
+    if (!LOAD_EXTRAS) return; // prevent loading evolution chain
     let mounted = true;
     const API = (import.meta as any)?.env?.VITE_POKEAPI_URL || "https://pokeapi.co/api/v2";
 
@@ -340,6 +343,7 @@ export function PokemonDetailModal({
   }, [enhanced?.species?.evolutionChainId]);
 
   useEffect(() => {
+    if (!LOAD_EXTRAS) return; // prevent loading base form preview for Mega forms
     const API = (import.meta as any)?.env?.VITE_POKEAPI_URL || "https://pokeapi.co/api/v2";
     const nm = String((enhanced ?? pokemon)?.name ?? "").toLowerCase();
 
@@ -1038,7 +1042,7 @@ export function PokemonDetailModal({
                 </div>
 
                 {/* Evolution Chain Preview */}
-                {evolutionPreview.length > 0 && (
+                {LOAD_EXTRAS && evolutionPreview.length > 0 && (
                   <div>
                     <h4 className="font-semibold mb-3">Evolution Chain</h4>
                     <div className="flex items-center gap-3 overflow-x-auto pb-2">
@@ -1071,7 +1075,7 @@ export function PokemonDetailModal({
                 )}
 
                 {/* Base Form (for Mega evolutions) */}
-                {isMega && baseFormPreview && (
+                {LOAD_EXTRAS && isMega && baseFormPreview && (
                   <div>
                     <h4 className="font-semibold mb-3">Base Form</h4>
                     <div className="flex items-center gap-3">
