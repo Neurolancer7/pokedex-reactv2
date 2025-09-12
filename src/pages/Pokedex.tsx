@@ -118,7 +118,25 @@ function gmaxToPokemon(g: GigantamaxPokemon): Pokemon {
 }
 
 async function buildPokemonFromFormName(fetcher: <T>(u: string) => Promise<T>, fname: string) {
-  const pokemonJson: any = await fetcher<any>(`https://pokeapi.co/api/v2/pokemon/${fname}`);
+  // Add: resolve via pokemon endpoint first, then fallback to pokemon-form -> pokemon
+  const tryFetchPokemon = async (name: string): Promise<any> => {
+    return await fetcher<any>(`https://pokeapi.co/api/v2/pokemon/${name}`);
+  };
+  const tryFetchViaForm = async (formName: string): Promise<any> => {
+    const formJson = await fetcher<any>(`https://pokeapi.co/api/v2/pokemon-form/${formName}`);
+    const pUrl: string = String(formJson?.pokemon?.url ?? "");
+    if (!pUrl) throw new Error("Missing pokemon url from form");
+    return await fetcher<any>(pUrl);
+  };
+
+  let pokemonJson: any = null;
+  try {
+    pokemonJson = await tryFetchPokemon(fname);
+  } catch {
+    // Fallback for names that only exist as pokemon-form
+    pokemonJson = await tryFetchViaForm(fname);
+  }
+
   const id: number = Number(pokemonJson?.id ?? 0);
   const types: string[] = Array.isArray(pokemonJson?.types)
     ? pokemonJson.types.map((t: any) => String(t?.type?.name ?? "")).filter(Boolean)
@@ -533,11 +551,12 @@ export default function Pokedex() {
         // Reuse existing retry helper for robustness
         const forms: FormInfo[] = await runWithRetries(() => fetchAlternateForms(), 5, 500);
 
-        // Flatten base species + all form names, excluding any accidental mega/gmax (already excluded in fetchAlternateForms)
+        // Flatten: include default variety base pokemon (when available) + all form names (excluding mega/gmax already)
         const names: string[] = [];
         for (const row of forms) {
-          // Use default variety pokemon name if it exists; avoid fetching non-existent /pokemon/{speciesName}
-          if (row.basePokemonName) names.push(String(row.basePokemonName).toLowerCase());
+          if (row.basePokemonName) {
+            names.push(String(row.basePokemonName).toLowerCase());
+          }
           for (const f of row.forms) {
             if (!f.formName) continue;
             const n = String(f.formName).toLowerCase();
@@ -549,7 +568,7 @@ export default function Pokedex() {
         // Deduplicate
         const uniq = Array.from(new Set(names));
 
-        // Map to Pokemon entries by fetching /pokemon/{formName} in small batches
+        // Map to Pokemon entries by fetching via pokemon name; if 404, fallback to pokemon-form -> pokemon
         const batchSize = 8;
         const out: Pokemon[] = [];
         for (let i = 0; i < uniq.length; i += batchSize) {
