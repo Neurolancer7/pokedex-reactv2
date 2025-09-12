@@ -838,7 +838,7 @@ export default function Pokedex() {
           </div>
 
           {/* All Regions extras: Gigantamax, Mega, Alternate Forms */}
-          {selectedRegion === "all" && (
+          {selectedRegion === "all" && selectedFormCategory !== "mega" && (
             <div className="mt-12 space-y-10">
               {/* Gigantamax Section */}
               <section>
