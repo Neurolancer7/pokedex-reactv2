@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { formatPokemonId, formatPokemonName, getTypeColor, calculateStatPercentage } from "@/lib/pokemon-api";
 import type { Pokemon } from "@/lib/pokemon-api";
+import { POKEMON_GENERATIONS } from "@/lib/pokemon-api";
 import { useEffect, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -43,11 +44,13 @@ export function PokemonDetailModal({
 
   const [enhanced, setEnhanced] = useState<Pokemon | null>(null);
   const [showShiny, setShowShiny] = useState(false);
+  const [evolutionPreview, setEvolutionPreview] = useState<Array<{ name: string; sprite?: string; id?: number }>>([]);
 
   useEffect(() => {
     let mounted = true;
     setEnhanced(null);
     setShowShiny(false);
+    setEvolutionPreview([]);
 
     const needsDetails =
       !pokemon.stats?.length ||
@@ -128,6 +131,18 @@ export function PokemonDetailModal({
         })(),
       };
 
+      const parsedGen = (() => {
+        const genName: string | undefined = species?.generation?.name;
+        if (!genName || typeof genName !== "string") return base.generation;
+        const match = genName.match(/generation-(\w+)/);
+        if (!match) return base.generation;
+        const roman = match[1]?.toUpperCase();
+        const romanMap: Record<string, number> = {
+          I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9,
+        };
+        return romanMap[roman] ?? base.generation;
+      })();
+
       return {
         ...base,
         baseExperience: typeof detail?.base_experience === "number" ? detail.base_experience : base.baseExperience,
@@ -138,18 +153,14 @@ export function PokemonDetailModal({
         stats,
         sprites,
         species: speciesOut,
+        generation: typeof base.generation === "number" ? base.generation : (parsedGen ?? base.generation),
       };
     };
 
     (async () => {
       try {
-        // Attempt to fetch full pokemon detail using name or id.
-        // If that fails (e.g., toxtricity-low-key, -gmax), resolve via pokemon-form -> pokemon.
         let detail: any | null = null;
         let species: any | null = null;
-
-        // Tracks the correct pokemon name to use for species lookup (base species for flavor/genus).
-        let pokemonNameForSpecies: string = nameOrId;
 
         const API = (import.meta as any)?.env?.VITE_POKEAPI_URL || "https://pokeapi.co/api/v2";
 
@@ -166,7 +177,6 @@ export function PokemonDetailModal({
           const pUrl: string = String(form?.pokemon?.url ?? "");
           if (!pUrl) throw new Error("Missing linked pokemon url from form");
           const poke = await fetchJson(pUrl);
-          // prefer the canonical pokemon name for species lookup
           const linkedName: string = String(poke?.name ?? formOrName);
           return { poke, linkedName };
         };
@@ -175,7 +185,6 @@ export function PokemonDetailModal({
           try {
             return await fetchJson(`${API}/pokemon-species/${name}`);
           } catch {
-            // fallback: species by numeric id when available
             const asNum = Number(name);
             if (Number.isFinite(asNum) && asNum > 0) {
               return await fetchJson(`${API}/pokemon-species/${asNum}`);
@@ -184,38 +193,33 @@ export function PokemonDetailModal({
           }
         };
 
-        // 1) Try /pokemon/{nameOrId}
+        let pokemonNameForSpecies: string = nameOrId;
+
         try {
           detail = await tryFetchPokemon(nameOrId);
           pokemonNameForSpecies = String(detail?.name ?? nameOrId);
         } catch {
-          // 2) Try /pokemon-form/{nameOrId} -> linked /pokemon
           try {
             const { poke, linkedName } = await tryFetchViaForm(nameOrId);
             detail = poke;
             pokemonNameForSpecies = linkedName;
           } catch {
-            // 3) Last resort: if we have an id, try /pokemon/{id}
             const idNum = Number(pokemon.pokemonId);
             if (Number.isFinite(idNum) && idNum > 0) {
               detail = await tryFetchPokemonById(idNum);
               pokemonNameForSpecies = String(detail?.name ?? pokemonNameForSpecies);
             } else {
-              // Give up on detail; still try species for description/genus
               detail = null;
             }
           }
         }
 
-        // Species: prefer resolved pokemonNameForSpecies
         species = await tryFetchSpecies(pokemonNameForSpecies);
 
         if (!mounted) return;
 
-        // If detail is still null, pass an empty object so normalize keeps base fields
         setEnhanced(normalize(pokemon, detail ?? {}, species ?? {}));
       } catch {
-        // Best-effort enhancement; ignore errors and keep base
       }
     })();
 
@@ -223,6 +227,64 @@ export function PokemonDetailModal({
       mounted = false;
     };
   }, [pokemon]);
+
+  useEffect(() => {
+    let mounted = true;
+    const API = (import.meta as any)?.env?.VITE_POKEAPI_URL || "https://pokeapi.co/api/v2";
+
+    const loadEvolution = async () => {
+      try {
+        const evoId = enhanced?.species?.evolutionChainId;
+        if (!evoId) return;
+
+        const evoRes = await fetch(`${API}/evolution-chain/${evoId}`);
+        if (!evoRes.ok) return;
+        const evo = await evoRes.json();
+
+        const collectSpeciesNames = (node: any): string[] => {
+          if (!node) return [];
+          const name = String(node?.species?.name ?? "").trim();
+          const next: any[] = Array.isArray(node?.evolves_to) ? node.evolves_to : [];
+          if (next.length === 0) return name ? [name] : [];
+          return [name, ...collectSpeciesNames(next[0])];
+        };
+
+        const names = collectSpeciesNames(evo?.chain);
+        if (!names.length) return;
+
+        const sprites = await Promise.all(
+          names.map(async (nm) => {
+            try {
+              const pr = await fetch(`${API}/pokemon/${nm}`);
+              if (!pr.ok) throw new Error("pokemon fail");
+              const pd = await pr.json();
+              const sprite: string | undefined =
+                pd?.sprites?.other?.["official-artwork"]?.front_default ||
+                pd?.sprites?.front_default ||
+                undefined;
+              const idNum: number | undefined = typeof pd?.id === "number" ? pd.id : undefined;
+              return { name: nm, sprite, id: idNum };
+            } catch {
+              return { name: nm };
+            }
+          })
+        );
+
+        if (!mounted) return;
+        setEvolutionPreview(sprites);
+      } catch {
+      }
+    };
+
+    setEvolutionPreview([]);
+    if (enhanced?.species?.evolutionChainId) {
+      loadEvolution();
+    }
+
+    return () => {
+      mounted = false;
+    };
+  }, [enhanced?.species?.evolutionChainId]);
 
   const handleFavoriteClick = () => {
     onFavoriteToggle?.(pokemon.pokemonId);
@@ -317,6 +379,14 @@ export function PokemonDetailModal({
     ? data!.moves.map((m: any) => (typeof m === "string" ? m : String(m?.move?.name ?? ""))).filter(Boolean)
     : [];
   const statTotal = statsSafe.reduce((sum, s) => sum + (Number.isFinite(s.baseStat) ? s.baseStat : 0), 0);
+
+  const generationNumber: number | undefined =
+    typeof (data as any)?.generation === "number" ? (data as any).generation : undefined;
+  const regionLabel = (() => {
+    if (!generationNumber) return undefined;
+    const found = POKEMON_GENERATIONS.find((g) => g.id === generationNumber);
+    return found ? found.name : undefined;
+  })();
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -544,7 +614,56 @@ export function PokemonDetailModal({
                   </div>
                 </div>
 
-                <Separator />
+                {/* Evolution Chain Preview */}
+                {evolutionPreview.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-3">Evolution Chain</h4>
+                    <div className="flex items-center gap-3 overflow-x-auto pb-2">
+                      {evolutionPreview.map((s, i) => (
+                        <div key={`${s.name}-${i}`} className="flex items-center gap-3">
+                          <div className="flex flex-col items-center">
+                            <div className="w-16 h-16 rounded-full bg-muted/50 border flex items-center justify-center">
+                              {s.sprite ? (
+                                <img
+                                  src={s.sprite}
+                                  alt={s.name}
+                                  className="w-12 h-12 object-contain"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="text-xs text-muted-foreground">No Img</div>
+                              )}
+                            </div>
+                            <div className="mt-1 text-xs font-medium capitalize">
+                              {formatPokemonName(s.name)}
+                            </div>
+                          </div>
+                          {i < evolutionPreview.length - 1 && (
+                            <div className="text-muted-foreground">→</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Top Moves (preview) */}
+                {(() => {
+                  const topMoves = movesSafe.slice(0, 10);
+                  if (topMoves.length === 0) return null;
+                  return (
+                    <div>
+                      <h4 className="font-semibold mb-3">Top Moves</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {topMoves.map((m, idx) => (
+                          <Badge key={`${m}-${idx}`} variant="outline" className="capitalize">
+                            {String(m).replace("-", " ")}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Abilities */}
                 <div>
@@ -582,6 +701,20 @@ export function PokemonDetailModal({
                         <div className="text-muted-foreground">G-MAX Move</div>
                         <div className="font-medium">{gmaxMove}</div>
                       </div>
+                    )}
+                    {generationNumber && (
+                      <>
+                        <div>
+                          <div className="text-muted-foreground">Generation</div>
+                          <div className="font-medium">Gen {generationNumber}</div>
+                        </div>
+                        {regionLabel && (
+                          <div>
+                            <div className="text-muted-foreground">Region</div>
+                            <div className="font-medium">{regionLabel}</div>
+                          </div>
+                        )}
+                      </>
                     )}
                     {data.species.genus && (
                       <div>
