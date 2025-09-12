@@ -922,6 +922,71 @@ export function PokemonDetailModal({
                     </p>
                   </div>
                 )}
+
+                {/* Moved: Additional Info (species data) under Description */}
+                {(data?.species) && (
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    {isGmax && (
+                      <div>
+                        <div className="text-muted-foreground">Form</div>
+                        <div className="font-medium">Gigantamax</div>
+                      </div>
+                    )}
+                    {isGmax && gmaxMove && (
+                      <div>
+                        <div className="text-muted-foreground">G-MAX Move</div>
+                        <div className="font-medium">{gmaxMove}</div>
+                      </div>
+                    )}
+                    {isMega && (
+                      <div>
+                        <div className="text-muted-foreground">Form</div>
+                        <div className="font-medium">
+                          Mega Evolution{megaVariant ? ` (${megaVariant})` : ""}
+                        </div>
+                      </div>
+                    )}
+                    {generationNumber && (
+                      <>
+                        <div>
+                          <div className="text-muted-foreground">Generation</div>
+                          <div className="font-medium">Gen {generationNumber}</div>
+                        </div>
+                        {regionLabel && (
+                          <div>
+                            <div className="text-muted-foreground">Region</div>
+                            <div className="font-medium">{regionLabel}</div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {data.species.genus && (
+                      <div>
+                        <div className="text-muted-foreground">Species</div>
+                        <div className="font-medium">{data.species.genus}</div>
+                      </div>
+                    )}
+                    {data.species.habitat && (
+                      <div>
+                        <div className="text-muted-foreground">Habitat</div>
+                        <div className="font-medium capitalize">{data.species.habitat}</div>
+                      </div>
+                    )}
+                    {typeof data.species.captureRate === "number" && (
+                      <div>
+                        <div className="text-muted-foreground">Capture Rate</div>
+                        <div className="font-medium">{data.species.captureRate}</div>
+                      </div>
+                    )}
+                    {/* Only show Base EXP when > 0 to avoid stray "0" */}
+                    {(typeof data.baseExperience === "number" && data.baseExperience > 0) && (
+                      <div>
+                        <div className="text-muted-foreground">Base EXP</div>
+                        <div className="font-medium">{data.baseExperience}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Right Column - Stats and Details */}
@@ -1203,7 +1268,7 @@ export function PokemonDetailModal({
                         <div className="font-medium">{data.species.captureRate}</div>
                       </div>
                     )}
-                    {(typeof data.baseExperience === "number") && (
+                    {(typeof data.baseExperience === "number" && data.baseExperience > 0) && (
                       <div>
                         <div className="text-muted-foreground">Base EXP</div>
                         <div className="font-medium">{data.baseExperience}</div>
