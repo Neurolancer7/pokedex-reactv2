@@ -22,6 +22,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { genderDiffSpecies } from "@/lib/genderDiffSpecies";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface PokemonDetailModalProps {
   pokemon: Pokemon | null;
@@ -34,6 +35,19 @@ interface PokemonDetailModalProps {
   hasNext?: boolean;
   showGenderDifferences?: boolean;
 }
+
+type Stat = { name: string; baseStat: number; effort: number };
+type GenderVariant = {
+  name: string;
+  id: number;
+  sprite: string;
+  isMale: boolean | null; // null if not male/female specifically
+  stats: Stat[];
+  types: string[];
+  height?: number;
+  weight?: number;
+  hasSeparateStats: boolean; // false when falling back to default stats
+};
 
 export function PokemonDetailModal({
   pokemon,
@@ -52,12 +66,22 @@ export function PokemonDetailModal({
   const [showShiny, setShowShiny] = useState(false);
   const [evolutionPreview, setEvolutionPreview] = useState<Array<{ name: string; sprite?: string; id?: number }>>([]);
   const [baseFormPreview, setBaseFormPreview] = useState<{ name: string; sprite?: string; id?: number } | null>(null);
+  const [genderPanelOpen, setGenderPanelOpen] = useState(false);
+  const [gvLoading, setGvLoading] = useState(false);
+  const [gvError, setGvError] = useState<string | null>(null);
+  const [genderVariants, setGenderVariants] = useState<GenderVariant[] | null>(null);
 
   const fetchGenderDifference = useAction(api.genderDiffActions.fetchGenderDifference);
   const [gdLoading, setGdLoading] = useState(false);
   const [gdError, setGdError] = useState<string | null>(null);
   const [gdText, setGdText] = useState<string | null>(null);
   const [gdSource, setGdSource] = useState<string | null>(null);
+
+  // Helper: gender sprite url fallback (front_default style, not official artwork)
+  const genderSpriteUrl = (dexId: number, g: "male" | "female"): string => {
+    const base = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon";
+    return g === "female" ? `${base}/female/${dexId}.png` : `${base}/${dexId}.png`;
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -362,6 +386,135 @@ export function PokemonDetailModal({
     };
   }, [enhanced?.name, pokemon?.name]);
 
+  const loadGenderVariants = async () => {
+    if (genderVariants || gvLoading) return;
+    try {
+      setGvLoading(true);
+      setGvError(null);
+
+      const API = (import.meta as any)?.env?.VITE_POKEAPI_URL || "https://pokeapi.co/api/v2";
+      const baseName = String((enhanced ?? pokemon)?.name ?? "").toLowerCase();
+      const baseId = Number((enhanced ?? pokemon)?.pokemonId ?? pokemon?.pokemonId ?? 0);
+
+      const fetchJson = async (url: string) => {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
+        return r.json();
+      };
+
+      // Get base pokemon (stats/types/sprites) and candidate forms
+      const baseP = await fetchJson(`${API}/pokemon/${baseName}`).catch(async () => {
+        // Fallback to id if name fails
+        if (!Number.isFinite(baseId) || baseId <= 0) throw new Error("Base pokemon not found");
+        return await fetchJson(`${API}/pokemon/${baseId}`);
+      });
+
+      const candidateFormNames: string[] = [
+        String(baseP?.name ?? baseName),
+        ...(Array.isArray(baseP?.forms) ? baseP.forms.map((f: any) => String(f?.name ?? "")).filter(Boolean) : []),
+      ];
+      // Deduplicate
+      const uniqFormNames = Array.from(new Set(candidateFormNames));
+
+      // Identify male/female form names if present
+      const maleFormName = uniqFormNames.find((n) => n.endsWith("-male"));
+      const femaleFormName = uniqFormNames.find((n) => n.endsWith("-female"));
+
+      const fetchPokemonDetail = async (nameOrId: string | number) => {
+        const p = await fetchJson(`${API}/pokemon/${nameOrId}`);
+        const id: number = typeof p?.id === "number" ? p.id : baseId;
+        const types: string[] = Array.isArray(p?.types)
+          ? p.types.map((t: any) => String(t?.type?.name ?? "")).filter(Boolean)
+          : [];
+        const stats: Stat[] = Array.isArray(p?.stats)
+          ? p.stats
+              .map((s: any) => ({
+                name: String(s?.stat?.name ?? ""),
+                baseStat: Number(s?.base_stat ?? 0),
+                effort: Number(s?.effort ?? 0),
+              }))
+              .filter((s: any) => s.name)
+          : [];
+        const height: number | undefined = typeof p?.height === "number" ? p.height : undefined;
+        const weight: number | undefined = typeof p?.weight === "number" ? p.weight : undefined;
+        const sprite: string | undefined =
+          p?.sprites?.other?.["official-artwork"]?.front_default || p?.sprites?.front_default || undefined;
+        return { id, types, stats, height, weight, sprite };
+      };
+
+      // Prepare base details for fallback
+      const baseDetail = await fetchPokemonDetail(String(baseP?.name ?? baseName));
+
+      // Build Male variant
+      let maleVariant: GenderVariant | null = null;
+      if (maleFormName) {
+        const info = await fetchPokemonDetail(maleFormName);
+        maleVariant = {
+          name: maleFormName,
+          id: info.id,
+          sprite: info.sprite || genderSpriteUrl(info.id || baseId, "male"),
+          isMale: true,
+          stats: info.stats,
+          types: info.types.length ? info.types : baseDetail.types,
+          height: info.height ?? baseDetail.height,
+          weight: info.weight ?? baseDetail.weight,
+          hasSeparateStats: true,
+        };
+      } else {
+        // Fallback to base stats with male sprite (front_default path)
+        maleVariant = {
+          name: String(baseP?.name ?? baseName),
+          id: baseDetail.id || baseId,
+          sprite: baseDetail.sprite || genderSpriteUrl(baseDetail.id || baseId, "male"),
+          isMale: true,
+          stats: baseDetail.stats,
+          types: baseDetail.types,
+          height: baseDetail.height,
+          weight: baseDetail.weight,
+          hasSeparateStats: false,
+        };
+      }
+
+      // Build Female variant
+      let femaleVariant: GenderVariant | null = null;
+      if (femaleFormName) {
+        const info = await fetchPokemonDetail(femaleFormName);
+        femaleVariant = {
+          name: femaleFormName,
+          id: info.id,
+          sprite: info.sprite || genderSpriteUrl(info.id || baseId, "female"),
+          isMale: false,
+          stats: info.stats,
+          types: info.types.length ? info.types : baseDetail.types,
+          height: info.height ?? baseDetail.height,
+          weight: info.weight ?? baseDetail.weight,
+          hasSeparateStats: true,
+        };
+      } else {
+        // Fallback to base stats with female sprite path, if exists
+        femaleVariant = {
+          name: String(baseP?.name ?? baseName),
+          id: baseDetail.id || baseId,
+          sprite: genderSpriteUrl(baseDetail.id || baseId, "female"),
+          isMale: false,
+          stats: baseDetail.stats,
+          types: baseDetail.types,
+          height: baseDetail.height,
+          weight: baseDetail.weight,
+          hasSeparateStats: false,
+        };
+      }
+
+      // If both variants are identical sprites and no separate stats, still show both as requested.
+      setGenderVariants([maleVariant, femaleVariant]);
+    } catch (e) {
+      setGvError(e instanceof Error ? e.message : "Failed to load gender variants");
+      setGenderVariants(null);
+    } finally {
+      setGvLoading(false);
+    }
+  };
+
   const handleFavoriteClick = () => {
     onFavoriteToggle?.(pokemon.pokemonId);
   };
@@ -376,6 +529,8 @@ export function PokemonDetailModal({
   };
 
   const data = enhanced ?? pokemon;
+  // Add: stable base dex id for sprite fallbacks used in render
+  const baseDexId = Number((enhanced ?? pokemon)?.pokemonId ?? 0);
   const heightM = Number.isFinite(data?.height) ? (data!.height / 10).toFixed(1) : "–";
   const weightKg = Number.isFinite(data?.weight) ? (data!.weight / 10).toFixed(1) : "–";
   const spriteDefault = data?.sprites?.officialArtwork || data?.sprites?.frontDefault;
@@ -1035,6 +1190,166 @@ export function PokemonDetailModal({
                         <div className="text-muted-foreground">Base EXP</div>
                         <div className="font-medium">{data.baseExperience}</div>
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Gender Differences Button */}
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const next = !genderPanelOpen;
+                      setGenderPanelOpen(next);
+                      if (next && !genderVariants && !gvLoading) {
+                        await loadGenderVariants();
+                      }
+                    }}
+                    aria-expanded={genderPanelOpen}
+                    className="mt-2"
+                  >
+                    View Gender Differences
+                  </Button>
+                </div>
+
+                {/* Gender Differences Panel */}
+                {genderPanelOpen && (
+                  <div className="mt-3 p-3 rounded-lg border bg-gradient-to-br from-pink-500/5 to-purple-500/5">
+                    {gvLoading && (
+                      <div className="w-full flex items-center justify-center py-3" aria-busy="true" aria-live="polite">
+                        <div className="px-4 h-10 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow border border-white/10 flex items-center justify-center">
+                          <div className="h-8 w-8 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow flex items-center justify-center animate-pulse">
+                            <img
+                              src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
+                              alt="Loading Pokéball"
+                              className="h-6 w-6 animate-bounce-spin drop-shadow"
+                            />
+                          </div>
+                          <span className="ml-2 text-xs">Loading gender variants…</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {!gvLoading && gvError && (
+                      <div className="text-sm text-muted-foreground">
+                        Failed to load gender variants. Showing default details.
+                      </div>
+                    )}
+
+                    {!gvLoading && !gvError && Array.isArray(genderVariants) && genderVariants.length > 0 && (
+                      <Tabs defaultValue="male" className="w-full">
+                        <TabsList className="grid grid-cols-2 w-full">
+                          <TabsTrigger value="male">Male</TabsTrigger>
+                          <TabsTrigger value="female">Female</TabsTrigger>
+                        </TabsList>
+                        {genderVariants.map((v, idx) => {
+                          const value = v.isMale ? "male" : "female";
+                          return (
+                            <TabsContent key={`${value}-${idx}`} value={value} className="mt-3">
+                              <div className="grid sm:grid-cols-2 gap-4">
+                                {/* Sprite */}
+                                <div className="w-full flex items-center justify-center">
+                                  <div className="w-52 h-52 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted rounded-lg border">
+                                    <img
+                                      src={v.sprite}
+                                      alt={`${(enhanced ?? pokemon)?.name} ${value}`}
+                                      className="w-44 h-44 object-contain"
+                                      onError={(e) => {
+                                        const img = e.currentTarget as HTMLImageElement;
+                                        img.src = v.isMale === false
+                                          ? genderSpriteUrl(v.id || baseDexId, "female")
+                                          : genderSpriteUrl(v.id || baseDexId, "male");
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Info */}
+                                <div className="space-y-3">
+                                  {/* Types */}
+                                  <div className="flex gap-2 flex-wrap">
+                                    {v.types.map((t) => (
+                                      <Badge
+                                        key={`${value}-${t}`}
+                                        variant="secondary"
+                                        className="px-3 py-1 font-medium"
+                                        style={{
+                                          backgroundColor: getTypeColor(t) + "20",
+                                          color: getTypeColor(t),
+                                          borderColor: getTypeColor(t) + "40",
+                                        }}
+                                      >
+                                        {formatPokemonName(t)}
+                                      </Badge>
+                                    ))}
+                                  </div>
+
+                                  {/* Height/Weight */}
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="text-center p-2 bg-muted/50 rounded-lg">
+                                      <Ruler className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
+                                      <div className="text-xs text-muted-foreground">Height</div>
+                                      <div className="font-semibold">
+                                        {typeof v.height === "number" ? (v.height / 10).toFixed(1) : "–"}m
+                                      </div>
+                                    </div>
+                                    <div className="text-center p-2 bg-muted/50 rounded-lg">
+                                      <Weight className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
+                                      <div className="text-xs text-muted-foreground">Weight</div>
+                                      <div className="font-semibold">
+                                        {typeof v.weight === "number" ? (v.weight / 10).toFixed(1) : "–"}kg
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Stats */}
+                                  <div>
+                                    <h5 className="font-semibold mb-2 text-sm">Base Stats</h5>
+                                    <div className="space-y-2">
+                                      {v.stats.map((s) => {
+                                        const nm = String(s?.name ?? "stat");
+                                        const base = Number(s?.baseStat ?? 0);
+                                        const percentage = calculateStatPercentage(base);
+                                        const IconComponent = ((): any => {
+                                          switch (nm) {
+                                            case "hp": return Activity;
+                                            case "attack": return Sword;
+                                            case "defense": return Shield;
+                                            case "special-attack": return Zap;
+                                            case "special-defense": return Shield;
+                                            case "speed": return Activity;
+                                            default: return Activity;
+                                          }
+                                        })();
+                                        return (
+                                          <div key={`${value}-${nm}`} className="space-y-0.5">
+                                            <div className="flex justify-between items-center text-xs">
+                                              <div className="flex items-center gap-2">
+                                                <IconComponent className="h-3 w-3 text-muted-foreground" />
+                                                <span className="capitalize font-medium">
+                                                  {nm.replace("-", " ")}
+                                                </span>
+                                              </div>
+                                              <span className="font-mono font-semibold">{base}</span>
+                                            </div>
+                                            <Progress value={percentage} className="h-2" />
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                    {!v.hasSeparateStats && (
+                                      <div className="mt-2 text-[11px] text-muted-foreground">
+                                        No separate stats for this gender. Showing default stats.
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </TabsContent>
+                          );
+                        })}
+                      </Tabs>
                     )}
                   </div>
                 )}
