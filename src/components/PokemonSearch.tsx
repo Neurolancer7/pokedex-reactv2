@@ -29,6 +29,9 @@ interface PokemonSearchProps {
   searchQuery: string;
   selectedTypes: string[];
   selectedFormCategory?: string;
+  selectedRegion: string;
+  onRegionChange: (value: string) => void;
+  regionOptions: Array<{ key: string; label: string; range?: string }>;
 }
 
 export function PokemonSearch({
@@ -37,6 +40,9 @@ export function PokemonSearch({
   searchQuery,
   selectedTypes,
   selectedFormCategory,
+  selectedRegion,
+  onRegionChange,
+  regionOptions,
 }: PokemonSearchProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
 
@@ -87,6 +93,7 @@ export function PokemonSearch({
   const clearFilters = () => {
     try {
       onFilterChange({ types: [], formCategory: undefined });
+      if (selectedRegion !== "all") onRegionChange("all");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to clear filters";
       toast.error(msg);
@@ -222,6 +229,41 @@ export function PokemonSearch({
               />
             </span>
           </div>
+        )}
+
+        {/* Region Filter */}
+        <div className="shrink-0">
+          <Select value={selectedRegion} onValueChange={onRegionChange}>
+            <SelectTrigger
+              className={cn(
+                "w-44 sm:w-52",
+                selectedRegion !== "all" &&
+                  "border-primary/50 ring-2 ring-primary/30 bg-primary/5"
+              )}
+            >
+              <SelectValue placeholder="Region" />
+            </SelectTrigger>
+            <SelectContent>
+              {regionOptions.map((opt) => (
+                <SelectItem key={opt.key} value={opt.key}>
+                  {opt.label} {opt.range ? `(${opt.range})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Clear Region button when region filter is applied */}
+        {selectedRegion !== "all" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onRegionChange("all")}
+            className="gap-2 shrink-0"
+          >
+            <X className="h-4 w-4" />
+            <span className="hidden sm:inline">Clear Region</span>
+          </Button>
         )}
 
         {/* Clear Filters */}

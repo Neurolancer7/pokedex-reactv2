@@ -161,6 +161,7 @@ export default function Pokedex() {
     range: string;
     slugs: string[];
   }> = [
+    { key: "all", label: "All Regions", range: "#001–#1025", slugs: ["national"] },
     { key: "kanto", label: "Kanto", range: "#001–#151", slugs: ["kanto"] },
     { key: "johto", label: "Johto", range: "#152–#251", slugs: ["original-johto"] },
     { key: "hoenn", label: "Hoenn", range: "#252–#386", slugs: ["hoenn"] },
@@ -176,7 +177,7 @@ export default function Pokedex() {
       key: "alola",
       label: "Alola",
       range: "#722–#809",
-      slugs: ["updated-alola"], // includes USUM updates
+      slugs: ["updated-alola"],
     },
     {
       key: "galar",
@@ -188,7 +189,7 @@ export default function Pokedex() {
     { key: "paldea", label: "Paldea", range: "#906–#1010", slugs: ["paldea"] },
   ];
 
-  const [selectedRegion, setSelectedRegion] = useState<string>("kanto");
+  const [selectedRegion, setSelectedRegion] = useState<string>("all");
 
   // Helper to build minimal Pokemon from species id + name
   function buildMinimalPokemon(id: number, name: string): Pokemon {
@@ -490,6 +491,13 @@ export default function Pokedex() {
                 searchQuery={searchQuery}
                 selectedTypes={selectedTypes}
                 selectedFormCategory={selectedFormCategory}
+                selectedRegion={selectedRegion}
+                onRegionChange={handleRegionChange}
+                regionOptions={REGION_OPTIONS.map((r) => ({
+                  key: r.key,
+                  label: `${r.label}${r.range ? ` (${r.range})` : ""}`,
+                  range: r.range,
+                }))}
               />
             </motion.div>
           )}
@@ -505,21 +513,6 @@ export default function Pokedex() {
                 <h2 className="text-2xl font-bold tracking-tight">
                   {showFavorites ? "Your Favorites" : "Pokémon"}
                 </h2>
-                {/* Region pill */}
-                <div className="min-w-[180px]">
-                  <Select value={selectedRegion} onValueChange={handleRegionChange}>
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="Region" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {REGION_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.key} value={opt.key}>
-                          {opt.label} {opt.range ? `(${opt.range})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               {!showFavorites && (
