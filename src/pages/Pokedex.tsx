@@ -513,6 +513,9 @@ export default function Pokedex() {
   const removeFromFavorites = useConvexMutation(api.pokemon.removeFromFavorites);
   const fetchPokemonData = useAction(api.pokemonData.fetchAndCachePokemon);
 
+  // Disable any automatic data backfill or auto-fetching
+  const AUTO_FETCH_ENABLED = false;
+
   // On page load: purge all cached data (pokemon, species, forms, regional, gender)
   useEffect(() => {
     void clearCache({ scopes: ["pokemon", "species", "forms", "regional", "gender"] });
@@ -652,6 +655,7 @@ export default function Pokedex() {
 
   // Auto-fetch and cache Pokémon on first load if DB is empty
   useEffect(() => {
+    if (!AUTO_FETCH_ENABLED) return; // disable auto-loading entirely
     if (showFavorites) return;
     if (!pokemonData) return; // wait for first response
     const total = pokemonData.total ?? 0;
@@ -678,6 +682,7 @@ export default function Pokedex() {
 
   // Auto-fetch full dataset if a Forms category is selected and results are empty (ensures form tags exist)
   useEffect(() => {
+    if (!AUTO_FETCH_ENABLED) return; // disable auto-loading entirely
     if (showFavorites) return;
     if (!selectedFormCategory) return;
     if (isRefreshing) return;
@@ -706,6 +711,7 @@ export default function Pokedex() {
   // Backfill all Pokémon in default (All Forms) state to ensure full dataset is available for infinite scroll
   useEffect(() => {
     // Only in default list (not favorites, not alternate forms)
+    if (!AUTO_FETCH_ENABLED) return; // disable auto-loading entirely
     if (showFavorites) return;
     if (selectedFormCategory === "alternate") return;
     if (!pokemonData) return;
@@ -782,7 +788,7 @@ export default function Pokedex() {
       if (hasMore && !isLoadingMore) {
         // Start background backfill if dataset is incomplete
         const totalNow = pokemonData?.total ?? 0;
-        if (totalNow < 1025 && !isRefreshing) {
+        if (AUTO_FETCH_ENABLED && totalNow < 1025 && !isRefreshing) {
           setIsRefreshing(true);
           const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
           promise.finally(() => setIsRefreshing(false));
@@ -1198,7 +1204,7 @@ export default function Pokedex() {
                             if (isLoadingMore) return;
 
                             const totalNow = pokemonData?.total ?? 0;
-                            if (totalNow < 1025 && !isRefreshing) {
+                            if (AUTO_FETCH_ENABLED && totalNow < 1025 && !isRefreshing) {
                               setIsRefreshing(true);
                               const promise = runWithRetries(() => fetchPokemonData({ limit: 1025, offset: 0 }));
                               promise.finally(() => setIsRefreshing(false));
