@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Search, Filter, X, Globe } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,7 @@ export function PokemonSearch({
   regionOptions,
 }: PokemonSearchProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
+  const lastSentRef = useRef<string>("");
 
   const hasTypesActive = selectedTypes.length > 0;
   const hasFormActive = !!selectedFormCategory && selectedFormCategory !== "any";
@@ -58,10 +59,44 @@ export function PokemonSearch({
     return s;
   };
 
+  // Add: normalize input for stable searching
+  const normalizeQuery = (q: string) => {
+    let s = (q ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase();
+
+    // remove leading '#'
+    if (s.startsWith("#")) s = s.slice(1);
+
+    // collapse multiple spaces
+    s = s.replace(/\s{2,}/g, " ");
+
+    // numeric normalization: "001" -> "1"
+    if (/^\d+$/.test(s)) {
+      s = String(parseInt(s, 10)); // parseInt handles leading zeros
+    }
+
+    return s;
+  };
+
+  // Sync external searchQuery into local state if it changes externally
+  useEffect(() => {
+    if (searchQuery !== localSearch) {
+      setLocalSearch(searchQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
       try {
-        onSearch(localSearch);
+        const normalized = normalizeQuery(localSearch);
+        if (normalized !== lastSentRef.current) {
+          onSearch(normalized);
+          lastSentRef.current = normalized;
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Search failed";
         toast.error(msg);
@@ -127,6 +162,21 @@ export function PokemonSearch({
           value={localSearch}
           onChange={(e) => setLocalSearch(e.target.value)}
           className="pl-9 pr-4"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              try {
+                const normalized = normalizeQuery(localSearch);
+                if (normalized !== lastSentRef.current) {
+                  onSearch(normalized);
+                  lastSentRef.current = normalized;
+                }
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : "Search failed";
+                toast.error(msg);
+              }
+            }
+          }}
+          aria-label="Search Pokémon"
         />
       </div>
 
