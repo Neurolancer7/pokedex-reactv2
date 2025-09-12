@@ -66,6 +66,11 @@ async function fetchJsonWithRetry(url: string, signal?: AbortSignal) {
 
 export function useRegionalForms(species?: string[]) {
   const [items, setItems] = useState<AggregatedForm[]>([]);
+  const itemsRef = useRef<AggregatedForm[]>([]);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +112,9 @@ export function useRegionalForms(species?: string[]) {
         ...r,
         pokemonId: typeof r?.pokemonId === "number" ? r.pokemonId : r.dexId,
       });
-      const merged = [...items.map(normalize), ...(json?.results ?? []).map(normalize)];
+
+      // Use ref (not state) to avoid changing fetchPage deps
+      const merged = [...itemsRef.current.map(normalize), ...(json?.results ?? []).map(normalize)];
 
       // Dedupe by formId else dexId-formName
       const seen = new Set<string>();
@@ -138,7 +145,7 @@ export function useRegionalForms(species?: string[]) {
     } finally {
       setLoading(false);
     }
-  }, [speciesParam, items]);
+  }, [speciesParam]);
 
   useEffect(() => {
     reset();
@@ -150,7 +157,7 @@ export function useRegionalForms(species?: string[]) {
         abortRef.current?.abort();
       } catch {}
     };
-  }, [speciesParam, reset, fetchPage]);
+  }, [speciesParam]);
 
   const loadMore = useCallback(async () => {
     if (loading) return;
