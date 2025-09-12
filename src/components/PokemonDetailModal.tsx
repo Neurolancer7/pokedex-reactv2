@@ -937,12 +937,39 @@ export function PokemonDetailModal({
                 )}
 
                 {/* Gender Differences (Bulbapedia) */}
-                <div className="p-4 bg-muted/30 rounded-lg">
-                  <h4 className="font-semibold mb-2">Gender Differences</h4>
+                <div
+                  className={`p-4 rounded-lg border bg-muted/30 ${
+                    isGmax
+                      ? "ring-2 ring-purple-500/30 bg-purple-500/5"
+                      : isMega
+                        ? "ring-2 ring-fuchsia-500/30 bg-fuchsia-500/5"
+                        : isAlternateForm
+                          ? "ring-2 ring-sky-500/30 bg-sky-500/5"
+                          : ""
+                  }`}
+                >
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <Sparkles
+                      className={`h-4 w-4 ${
+                        isGmax
+                          ? "text-purple-500"
+                          : isMega
+                            ? "text-fuchsia-500"
+                            : isAlternateForm
+                              ? "text-sky-500"
+                              : "text-foreground"
+                      }`}
+                    />
+                    Gender Differences
+                  </h4>
 
                   {/* Loading */}
                   {gdLoading && (
-                    <div className="w-full flex items-center justify-center py-2" aria-busy="true" aria-live="polite">
+                    <div
+                      className="w-full flex items-center justify-center py-2"
+                      aria-busy="true"
+                      aria-live="polite"
+                    >
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <img
                           src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
@@ -956,14 +983,14 @@ export function PokemonDetailModal({
 
                   {/* Error */}
                   {gdError && !gdLoading && (
-                    <p className="text-sm text-muted-foreground">
+                    <div className="text-sm rounded-md border bg-background/60 p-2 text-red-500">
                       {gdError}
-                    </p>
+                    </div>
                   )}
 
                   {/* Description */}
                   {!gdLoading && !gdError && (
-                    <p className="text-sm text-muted-foreground leading-relaxed">
+                    <p className="text-sm leading-relaxed text-foreground/90">
                       {gdText || "No known visual gender differences."}
                     </p>
                   )}
@@ -976,7 +1003,15 @@ export function PokemonDetailModal({
                         href={gdSource}
                         target="_blank"
                         rel="noreferrer"
-                        className="underline underline-offset-2 hover:text-foreground"
+                        className={`underline underline-offset-2 hover:text-foreground ${
+                          isGmax
+                            ? "decoration-purple-500/60"
+                            : isMega
+                              ? "decoration-fuchsia-500/60"
+                              : isAlternateForm
+                                ? "decoration-sky-500/60"
+                                : ""
+                        }`}
                       >
                         Bulbapedia
                       </a>
