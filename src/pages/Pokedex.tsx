@@ -520,9 +520,12 @@ export default function Pokedex() {
     const run = async () => {
       // Only fetch when the 'alternate' forms filter is active
       if (selectedFormCategory !== "alternate") {
-        setAltList([]);
-        setAltHasMore(false);
-        setAltLoading(false);
+        // Do not clear if we're in All Regions extras (handled by the other effect)
+        if (!(selectedRegion === "all" && !selectedFormCategory)) {
+          setAltList([]);
+          setAltHasMore(false);
+          setAltLoading(false);
+        }
         return;
       }
       try {
@@ -561,6 +564,12 @@ export default function Pokedex() {
           );
           for (const p of cards) if (p) out.push(p as Pokemon);
           if (cancelled) break;
+
+          // Progressive update so UI shows data incrementally
+          if (!cancelled) {
+            setAltList([...out]);
+            setAltHasMore(i + batchSize < uniq.length);
+          }
         }
 
         // Sort by national dex id then name for stability
@@ -586,7 +595,7 @@ export default function Pokedex() {
     return () => {
       cancelled = true;
     };
-  }, [selectedFormCategory]);
+  }, [selectedFormCategory, selectedRegion]);
 
   // Add: Effect to fetch and populate alternate forms when filter is active
   useEffect(() => {
@@ -639,6 +648,12 @@ export default function Pokedex() {
           );
           for (const p of cards) if (p) out.push(p as Pokemon);
           if (cancelled) break;
+
+          // Progressive update for All Regions extras too
+          if (!cancelled) {
+            setAltList([...out]);
+            setAltHasMore(i + batchSize < uniq.length);
+          }
         }
 
         // Sort by national dex id then name for stability
