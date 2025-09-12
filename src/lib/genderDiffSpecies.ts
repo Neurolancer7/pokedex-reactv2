@@ -1,5 +1,6 @@
 // Predefined list from Bulbapedia (normalized lowercase, easy to update/extend)
 export const genderDiffSpecies: string[] = [
+  // Generation I
   "venusaur",
   "butterfree",
   "rattata",
@@ -17,19 +18,39 @@ export const genderDiffSpecies: string[] = [
   "hypno",
   "rhyhorn",
   "rhydon",
+  "eevee",
   "goldeen",
   "seaking",
   "scyther",
   "magikarp",
   "gyarados",
+
+  // Generation II
   "meganium",
+  "ledyba",
+  "ledian",
+  "xatu",
+  "sudowoodo",
+  "politoed",
+  "aipom",
+  "wooper",
+  "quagsire",
+  "murkrow",
+  "wobbuffet",
+  "girafarig",
+  "gligar",
+  "steelix",
+  "scizor",
+  "heracross",
   "sneasel",
+  "sneasel-hisui", // Hisuian Sneasel (PokeAPI form id)
   "ursaring",
   "piloswine",
   "octillery",
   "houndoom",
-  "heracross",
-  "tyranitar",
+  "donphan",
+
+  // Generation III
   "torchic",
   "combusken",
   "blaziken",
@@ -41,6 +62,31 @@ export const genderDiffSpecies: string[] = [
   "meditite",
   "medicham",
   "roselia",
+  "gulpin",
+  "swalot",
+  "numel",
+  "camerupt",
+  "cacturne",
+  "milotic",
+  "relicanth",
+
+  // Generation IV
+  "starly",
+  "staravia",
+  "staraptor",
+  "bidoof",
+  "bibarel",
+  "kricketot",
+  "kricketune",
+  "shinx",
+  "luxio",
+  "luxray",
+  "roserade",
+  "combee",
+  "pachirisu",
+  "buizel",
+  "floatzel",
+  "ambipom",
   "gible",
   "gabite",
   "garchomp",
@@ -48,12 +94,28 @@ export const genderDiffSpecies: string[] = [
   "hippowdon",
   "croagunk",
   "toxicroak",
-  "combee",
-  "vespiquen",
+  "finneon",
+  "lumineon",
+  "snover",
+  "abomasnow",
+  "weavile",
+  "rhyperior",
+  "tangrowth",
+  "mamoswine",
+
+  // Generation V
   "unfezant",
   "frillish",
   "jellicent",
+
+  // Generation VI
   "pyroar",
   "meowstic",
+
+  // Generation VIII
+  "indeedee",
   "basculegion",
+
+  // Generation IX
+  "oinkologne",
 ];
