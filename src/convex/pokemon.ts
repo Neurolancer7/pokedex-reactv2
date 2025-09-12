@@ -485,3 +485,43 @@ export const getFavorites = query({
     }
   },
 });
+
+// Clear cached Pokemon-related data (excluding user favorites)
+export const clearCache = mutation({
+  args: {
+    // optional subset: ["pokemon","species","forms","regional","gender"]
+    scopes: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    const wanted = new Set(
+      (args.scopes ?? ["pokemon", "species", "forms", "regional", "gender"]).map((s) => s.toLowerCase())
+    );
+
+    const tasks: Array<{
+      key: string;
+      table: "pokemon" | "pokemonSpecies" | "pokemonForms" | "regionalDex" | "genderDifferences";
+    }> = [];
+
+    if (wanted.has("pokemon")) tasks.push({ key: "pokemon", table: "pokemon" });
+    if (wanted.has("species")) tasks.push({ key: "species", table: "pokemonSpecies" });
+    if (wanted.has("forms")) tasks.push({ key: "forms", table: "pokemonForms" });
+    if (wanted.has("regional")) tasks.push({ key: "regional", table: "regionalDex" });
+    if (wanted.has("gender")) tasks.push({ key: "gender", table: "genderDifferences" });
+
+    const deleted: Record<string, number> = Object.create(null);
+
+    for (const t of tasks) {
+      let count = 0;
+      // Use async iteration to avoid loading everything into memory
+      // Note: order doesn't matter; we just wipe the cache tables
+      // Favorites are intentionally not touched
+      for await (const row of ctx.db.query(t.table)) {
+        await ctx.db.delete(row._id);
+        count++;
+      }
+      deleted[t.key] = count;
+    }
+
+    return { deleted };
+  },
+});
