@@ -18,6 +18,8 @@ import type { Pokemon } from "@/lib/pokemon-api";
 import { POKEMON_GENERATIONS } from "@/lib/pokemon-api";
 import { useEffect, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useAction } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 interface PokemonDetailModalProps {
   pokemon: Pokemon | null;
@@ -46,6 +48,13 @@ export function PokemonDetailModal({
   const [showShiny, setShowShiny] = useState(false);
   const [evolutionPreview, setEvolutionPreview] = useState<Array<{ name: string; sprite?: string; id?: number }>>([]);
   const [baseFormPreview, setBaseFormPreview] = useState<{ name: string; sprite?: string; id?: number } | null>(null);
+
+  // Gender Differences state
+  const fetchGenderDifference = useAction(api.genderDiffActions.fetchGenderDifference);
+  const [gdLoading, setGdLoading] = useState(false);
+  const [gdError, setGdError] = useState<string | null>(null);
+  const [gdText, setGdText] = useState<string | null>(null);
+  const [gdSource, setGdSource] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -335,6 +344,42 @@ export function PokemonDetailModal({
       mounted = false;
     };
   }, [enhanced?.name, pokemon?.name]);
+
+  // Load Gender Differences (Bulbapedia) when modal opens and pokemon changes
+  useEffect(() => {
+    let mounted = true;
+
+    const run = async () => {
+      if (!isOpen || !pokemon) {
+        setGdLoading(false);
+        setGdError(null);
+        setGdText(null);
+        setGdSource(null);
+        return;
+      }
+      try {
+        setGdLoading(true);
+        setGdError(null);
+        setGdText(null);
+        setGdSource(null);
+
+        const res = await fetchGenderDifference({ name: String(pokemon.name).toLowerCase(), dexId: Number(pokemon.pokemonId) });
+        if (!mounted) return;
+        setGdText((res as any)?.description || null);
+        setGdSource((res as any)?.sourceUrl || null);
+      } catch (e) {
+        if (!mounted) return;
+        const msg = e instanceof Error ? e.message : "Failed to load gender differences";
+        setGdError(msg);
+      } finally {
+        if (!mounted) return;
+        setGdLoading(false);
+      }
+    };
+
+    run();
+    return () => { mounted = false; };
+  }, [isOpen, pokemon?.name, pokemon?.pokemonId, fetchGenderDifference]);
 
   const handleFavoriteClick = () => {
     onFavoriteToggle?.(pokemon.pokemonId);
@@ -641,7 +686,7 @@ export function PokemonDetailModal({
                   ))}
                 </div>
 
-                {/* G-Max Move chip under image */}
+                {/* G-MAX Move chip under image */}
                 {isGmax && gmaxMove && (
                   <div className="mt-2 text-center">
                     <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium bg-purple-500/10 text-foreground border-purple-500/30">
@@ -890,6 +935,57 @@ export function PokemonDetailModal({
                     )}
                   </div>
                 )}
+
+                {/* Gender Differences (Bulbapedia) */}
+                <div className="p-4 bg-muted/30 rounded-lg">
+                  <h4 className="font-semibold mb-2">Gender Differences</h4>
+
+                  {/* Loading */}
+                  {gdLoading && (
+                    <div className="w-full flex items-center justify-center py-2" aria-busy="true" aria-live="polite">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <img
+                          src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
+                          alt="Loading Pokéball"
+                          className="h-5 w-5 animate-bounce"
+                        />
+                        <span>Loading…</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Error */}
+                  {gdError && !gdLoading && (
+                    <p className="text-sm text-muted-foreground">
+                      {gdError}
+                    </p>
+                  )}
+
+                  {/* Description */}
+                  {!gdLoading && !gdError && (
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {gdText || "No known visual gender differences."}
+                    </p>
+                  )}
+
+                  {/* Attribution */}
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Descriptions sourced from{" "}
+                    {gdSource ? (
+                      <a
+                        href={gdSource}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline underline-offset-2 hover:text-foreground"
+                      >
+                        Bulbapedia
+                      </a>
+                    ) : (
+                      <span>Bulbapedia</span>
+                    )}
+                    .
+                  </div>
+                </div>
               </div>
             </div>
           </div>
