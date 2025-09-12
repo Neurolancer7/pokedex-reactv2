@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Heart, Ruler, Weight, Zap, Shield, Sword, Activity, Sparkles } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Dialog,
@@ -937,39 +938,26 @@ export function PokemonDetailModal({
                 )}
 
                 {/* Gender Differences (Bulbapedia) */}
-                <div
-                  className={`p-4 rounded-lg border bg-muted/30 ${
-                    isGmax
-                      ? "ring-2 ring-purple-500/30 bg-purple-500/5"
-                      : isMega
-                        ? "ring-2 ring-fuchsia-500/30 bg-fuchsia-500/5"
-                        : isAlternateForm
-                          ? "ring-2 ring-sky-500/30 bg-sky-500/5"
-                          : ""
-                  }`}
-                >
-                  <h4 className="font-semibold mb-3 flex items-center gap-2">
-                    <Sparkles
-                      className={`h-4 w-4 ${
-                        isGmax
-                          ? "text-purple-500"
-                          : isMega
-                            ? "text-fuchsia-500"
-                            : isAlternateForm
-                              ? "text-sky-500"
-                              : "text-foreground"
-                      }`}
-                    />
-                    Gender Differences
-                  </h4>
+                <div className="p-4 rounded-lg border bg-gradient-to-br from-pink-500/5 via-transparent to-purple-500/5">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold flex items-center gap-2">
+                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-pink-500/20 text-pink-600 border border-pink-500/30">♀</span>
+                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-500/20 text-blue-600 border border-blue-500/30">♂</span>
+                      Gender Differences
+                    </h4>
+                    {gdSource && (
+                      <Button asChild variant="outline" size="sm" className="h-7 px-2">
+                        <a href={gdSource} target="_blank" rel="noreferrer" aria-label="Open Bulbapedia">
+                          <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                          Source
+                        </a>
+                      </Button>
+                    )}
+                  </div>
 
                   {/* Loading */}
                   {gdLoading && (
-                    <div
-                      className="w-full flex items-center justify-center py-2"
-                      aria-busy="true"
-                      aria-live="polite"
-                    >
+                    <div className="w-full flex items-center justify-center py-2" aria-busy="true" aria-live="polite">
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <img
                           src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
@@ -983,14 +971,14 @@ export function PokemonDetailModal({
 
                   {/* Error */}
                   {gdError && !gdLoading && (
-                    <div className="text-sm rounded-md border bg-background/60 p-2 text-red-500">
+                    <p className="text-sm text-muted-foreground">
                       {gdError}
-                    </div>
+                    </p>
                   )}
 
                   {/* Description */}
                   {!gdLoading && !gdError && (
-                    <p className="text-sm leading-relaxed text-foreground/90">
+                    <p className={`text-sm leading-relaxed ${gdText ? "text-muted-foreground" : "text-muted-foreground italic"}`}>
                       {gdText || "No known visual gender differences."}
                     </p>
                   )}
@@ -1003,15 +991,7 @@ export function PokemonDetailModal({
                         href={gdSource}
                         target="_blank"
                         rel="noreferrer"
-                        className={`underline underline-offset-2 hover:text-foreground ${
-                          isGmax
-                            ? "decoration-purple-500/60"
-                            : isMega
-                              ? "decoration-fuchsia-500/60"
-                              : isAlternateForm
-                                ? "decoration-sky-500/60"
-                                : ""
-                        }`}
+                        className="underline underline-offset-2 hover:text-foreground"
                       >
                         Bulbapedia
                       </a>
