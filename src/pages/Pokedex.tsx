@@ -118,23 +118,24 @@ function gmaxToPokemon(g: GigantamaxPokemon): Pokemon {
 }
 
 async function buildPokemonFromFormName(fetcher: <T>(u: string) => Promise<T>, fname: string) {
-  // Add: resolve via pokemon endpoint first, then fallback to pokemon-form -> pokemon
-  const tryFetchPokemon = async (name: string): Promise<any> => {
-    return await fetcher<any>(`https://pokeapi.co/api/v2/pokemon/${name}`);
-  };
+  // Prefer: fetch via pokemon-form first, then fallback to pokemon endpoint to avoid 404s for form-only names
   const tryFetchViaForm = async (formName: string): Promise<any> => {
     const formJson = await fetcher<any>(`https://pokeapi.co/api/v2/pokemon-form/${formName}`);
     const pUrl: string = String(formJson?.pokemon?.url ?? "");
     if (!pUrl) throw new Error("Missing pokemon url from form");
     return await fetcher<any>(pUrl);
   };
+  const tryFetchPokemon = async (name: string): Promise<any> => {
+    return await fetcher<any>(`https://pokeapi.co/api/v2/pokemon/${name}`);
+  };
 
   let pokemonJson: any = null;
   try {
-    pokemonJson = await tryFetchPokemon(fname);
-  } catch {
-    // Fallback for names that only exist as pokemon-form
+    // First try via pokemon-form; many alternates don't exist at /pokemon/{name}
     pokemonJson = await tryFetchViaForm(fname);
+  } catch {
+    // Fallback to direct pokemon endpoint for base/default names that do exist
+    pokemonJson = await tryFetchPokemon(fname);
   }
 
   const id: number = Number(pokemonJson?.id ?? 0);
