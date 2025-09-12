@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { Pokemon } from "@/lib/pokemon-api";
 import { fetchGigantamaxList, type GigantamaxPokemon } from "@/lib/gigantamax";
 import { fetchAlternateForms, type FormInfo } from "@/lib/alternateForms";
+import { useAlternateForms } from "@/lib/useAlternateForms";
 
 class ErrorBoundary extends React.Component<{ onRetry: () => void; children: React.ReactNode }, { hasError: boolean; errorMessage?: string }> {
   constructor(props: { onRetry: () => void; children: React.ReactNode }) {
@@ -246,6 +247,15 @@ export default function Pokedex() {
   const [altHasMore, setAltHasMore] = useState(false);
   const altQueueRef = useRef<string[] | null>(null);
   const [altLoading, setAltLoading] = useState(false);
+
+  // Replace local alternate forms fetching with robust hook
+  const {
+    items: altItems,
+    loading: altLoadingHook,
+    hasMore: altHasMoreHook,
+    fetchNextPage: fetchMoreAlt,
+    reset: resetAlt,
+  } = useAlternateForms();
 
   // Regions mapping: label, display range, and pokedex slugs to aggregate
   const REGION_OPTIONS: Array<{
@@ -636,7 +646,7 @@ export default function Pokedex() {
   // Client-side filtering for search and types; switch dataset by forms filter
   const sourceList = selectedFormCategory === "mega" ? megaList
                     : selectedFormCategory === "gigantamax" ? gmaxList
-                    : selectedFormCategory === "alternate" ? altList
+                    : selectedFormCategory === "alternate" ? (altItems as unknown as Pokemon[])
                     : masterList;
 
   const filteredList = sourceList.filter((p) => {
@@ -956,7 +966,7 @@ export default function Pokedex() {
                   : selectedFormCategory === "gigantamax"
                   ? gmaxLoading
                   : selectedFormCategory === "alternate"
-                  ? altLoading
+                  ? altLoadingHook
                   : loadingMaster
               }
             />
@@ -965,13 +975,19 @@ export default function Pokedex() {
           {/* Unified Load More section */}
           <div className="mt-8 flex flex-col items-center gap-3">
             <>
-              {!hasMore && displayPokemon.length > 0 && (
+              {!(
+                selectedFormCategory === "alternate" ? altHasMoreHook : hasMore
+              ) && displayPokemon.length > 0 && (
                 <div className="text-muted-foreground text-sm">No more Pokémon</div>
               )}
 
-              {hasMore && (
+              {(
+                selectedFormCategory === "alternate" ? altHasMoreHook : hasMore
+              ) && (
                 <>
-                  {isLoadingMore ? (
+                  {(
+                    selectedFormCategory === "alternate" ? altLoadingHook : isLoadingMore
+                  ) ? (
                     <div
                       className="w-full sm:w-auto flex items-center justify-center"
                       aria-busy="true"
@@ -993,6 +1009,10 @@ export default function Pokedex() {
                       variant="default"
                       className="w-full sm:w-auto px-6 h-11 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:from-blue-500 hover:to-purple-500 active:scale-[0.99] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                       onClick={() => {
+                        if (selectedFormCategory === "alternate") {
+                          void fetchMoreAlt();
+                          return;
+                        }
                         if (isLoadingMore) return;
                         setIsLoadingMore(true);
                         setTimeout(() => {
@@ -1003,8 +1023,10 @@ export default function Pokedex() {
                           setInfiniteEnabled(true); // enable infinite after first manual load
                         }, 0);
                       }}
-                      disabled={isLoadingMore || (selectedFormCategory === "mega" ? megaLoading : loadingMaster)}
-                      aria-busy={isLoadingMore}
+                      disabled={
+                        selectedFormCategory === "alternate" ? altLoadingHook : (isLoadingMore || (selectedFormCategory === "mega" ? megaLoading : loadingMaster))
+                      }
+                      aria-busy={selectedFormCategory === "alternate" ? altLoadingHook : isLoadingMore}
                       aria-live="polite"
                       aria-label="Load more Pokémon"
                     >
@@ -1051,11 +1073,23 @@ export default function Pokedex() {
                   <h3 className="text-xl font-semibold tracking-tight">Alternate Forms</h3>
                 </div>
                 <PokemonGrid
-                  pokemon={altList as unknown as Pokemon[]}
+                  pokemon={(altItems as unknown as Pokemon[])}
                   favorites={[]}
                   onFavoriteToggle={handleFavoriteToggle}
-                  isLoading={altLoading}
+                  isLoading={altLoadingHook}
                 />
+                {altHasMoreHook && (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      variant="default"
+                      className="px-6"
+                      onClick={() => void fetchMoreAlt()}
+                      disabled={altLoadingHook}
+                    >
+                      Load More
+                    </Button>
+                  </div>
+                )}
               </section>
             </div>
           )}
