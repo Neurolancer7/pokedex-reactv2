@@ -910,23 +910,20 @@ export default function Pokedex() {
         ? [...megaList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, megaVisibleCount)
         : (selectedFormCategory === "gigantamax"
             ? [...gmaxList].sort((a, b) => a.pokemonId - b.pokemonId).slice(0, gmaxVisibleCount)
-            : (selectedFormCategory === "regional"
-                ? []
-                : (() => {
-                    // Default: list or favorites, enforce generation range if selected
-                    const base = showFavorites ? (favorites || []) : items;
-                    let arr = [...base];
+            : (() => {
+                // Default: list or favorites, enforce generation range if selected
+                const base = showFavorites ? (favorites || []) : items;
+                let arr = [...base];
 
-                    if (selectedGeneration) {
-                      const range = GEN_RANGES[selectedGeneration];
-                      if (range) {
-                        arr = arr.filter((p) => p.pokemonId >= range.start && p.pokemonId <= range.end);
-                      }
-                    }
+                if (selectedGeneration) {
+                  const range = GEN_RANGES[selectedGeneration];
+                  if (range) {
+                    arr = arr.filter((p) => p.pokemonId >= range.start && p.pokemonId <= range.end);
+                  }
+                }
 
-                    return arr.sort((a, b) => a.pokemonId - b.pokemonId);
-                  })()
-              )
+                return arr.sort((a, b) => a.pokemonId - b.pokemonId);
+              })()
           )
       );
 
