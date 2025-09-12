@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { POKEMON_TYPES, POKEMON_GENERATIONS } from "@/lib/pokemon-api";
+import { cn } from "@/lib/utils";
 
 interface PokemonSearchProps {
   onSearch: (query: string) => void;
@@ -40,6 +41,10 @@ export function PokemonSearch({
   selectedFormCategory,
 }: PokemonSearchProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
+
+  const hasTypesActive = selectedTypes.length > 0;
+  const hasGenActive = typeof selectedGeneration === "number";
+  const hasFormActive = !!selectedFormCategory && selectedFormCategory !== "any";
 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
@@ -105,14 +110,20 @@ export function PokemonSearch({
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">{/* mobile horizontal scroll */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
         {/* Generation Filter */}
         <div className="shrink-0">
           <Select
             value={selectedGeneration?.toString() || "all"}
             onValueChange={handleGenerationChange}
           >
-            <SelectTrigger className="w-36 sm:w-44">{/* narrower on mobile */}
+            <SelectTrigger
+              className={cn(
+                "w-36 sm:w-44",
+                hasGenActive &&
+                  "border-primary/50 ring-2 ring-primary/30 bg-primary/5"
+              )}
+            >
               <SelectValue placeholder="Generation" />
             </SelectTrigger>
             <SelectContent>
@@ -129,11 +140,24 @@ export function PokemonSearch({
         {/* Type Filter */}
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" className="gap-2 shrink-0">
+            <Button
+              variant="outline"
+              className={cn(
+                "gap-2 shrink-0",
+                hasTypesActive &&
+                  "border-primary/50 ring-2 ring-primary/30 bg-primary/5"
+              )}
+            >
               <Filter className="h-4 w-4" />
               Types
               {selectedTypes.length > 0 && (
-                <Badge variant="secondary" className="ml-1">
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "ml-1",
+                    "bg-primary/10 text-primary border-primary/30"
+                  )}
+                >
                   {selectedTypes.length}
                 </Badge>
               )}
@@ -163,13 +187,16 @@ export function PokemonSearch({
           </PopoverContent>
         </Popover>
 
-        {/* Add: Forms Filter */}
+        {/* Forms Filter */}
         <div className="shrink-0">
-          <Select
-            value={selectedFormCategory || "any"}
-            onValueChange={handleFormsChange}
-          >
-            <SelectTrigger className="w-40 sm:w-48">
+          <Select value={selectedFormCategory || "any"} onValueChange={handleFormsChange}>
+            <SelectTrigger
+              className={cn(
+                "w-40 sm:w-48",
+                hasFormActive &&
+                  "border-primary/50 ring-2 ring-primary/30 bg-primary/5"
+              )}
+            >
               <SelectValue placeholder="Forms" />
             </SelectTrigger>
             <SelectContent>
@@ -183,7 +210,7 @@ export function PokemonSearch({
           </Select>
         </div>
 
-        {/* Gender Difference filter badge (uses uploaded image), styled like G-MAX badge */}
+        {/* Gender Difference and Gender Change badges */}
         {selectedFormCategory === "gender-diff" && (
           <div className="shrink-0">
             <span
