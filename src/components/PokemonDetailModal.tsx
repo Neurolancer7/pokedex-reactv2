@@ -1132,14 +1132,40 @@ export function PokemonDetailModal({
                   <div className="flex items-stretch justify-end gap-3">
                     <div className="text-right p-3 bg-muted/50 rounded-lg min-w-[120px]">
                       <div className="flex items-center justify-end gap-2 mb-1 text-muted-foreground">
-                        <Ruler className="h-4 w-4" />
+                        {/* Styled icon chip using primary type color */}
+                        <span
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm"
+                          style={{
+                            backgroundColor: primaryTypeColor + "15",
+                            borderColor: primaryTypeColor + "40",
+                          }}
+                          aria-hidden="true"
+                        >
+                          <Ruler
+                            className="h-3.5 w-3.5"
+                            style={{ color: primaryTypeColor }}
+                          />
+                        </span>
                         <span className="text-sm">Height</span>
                       </div>
                       <div className="font-semibold">{heightM}m</div>
                     </div>
                     <div className="text-right p-3 bg-muted/50 rounded-lg min-w-[120px]">
                       <div className="flex items-center justify-end gap-2 mb-1 text-muted-foreground">
-                        <Weight className="h-4 w-4" />
+                        {/* Styled icon chip using primary type color */}
+                        <span
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm"
+                          style={{
+                            backgroundColor: primaryTypeColor + "15",
+                            borderColor: primaryTypeColor + "40",
+                          }}
+                          aria-hidden="true"
+                        >
+                          <Weight
+                            className="h-3.5 w-3.5"
+                            style={{ color: primaryTypeColor }}
+                          />
+                        </span>
                         <span className="text-sm">Weight</span>
                       </div>
                       <div className="font-semibold">{weightKg}kg</div>
@@ -1294,14 +1320,40 @@ export function PokemonDetailModal({
                                   {/* Height/Weight */}
                                   <div className="grid grid-cols-2 gap-3">
                                     <div className="text-center p-2 bg-muted/50 rounded-lg">
-                                      <Ruler className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
+                                      {/* Softer icon chip for variant cards */}
+                                      <span
+                                        className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1"
+                                        style={{
+                                          backgroundColor: primaryTypeColor + "10",
+                                          borderColor: primaryTypeColor + "30",
+                                        }}
+                                        aria-hidden="true"
+                                      >
+                                        <Ruler
+                                          className="h-3.5 w-3.5"
+                                          style={{ color: primaryTypeColor }}
+                                        />
+                                      </span>
                                       <div className="text-xs text-muted-foreground">Height</div>
                                       <div className="font-semibold">
                                         {typeof v.height === "number" ? (v.height / 10).toFixed(1) : "–"}m
                                       </div>
                                     </div>
                                     <div className="text-center p-2 bg-muted/50 rounded-lg">
-                                      <Weight className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
+                                      {/* Softer icon chip for variant cards */}
+                                      <span
+                                        className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1"
+                                        style={{
+                                          backgroundColor: primaryTypeColor + "10",
+                                          borderColor: primaryTypeColor + "30",
+                                        }}
+                                        aria-hidden="true"
+                                      >
+                                        <Weight
+                                          className="h-3.5 w-3.5"
+                                          style={{ color: primaryTypeColor }}
+                                        />
+                                      </span>
                                       <div className="text-xs text-muted-foreground">Weight</div>
                                       <div className="font-semibold">
                                         {typeof v.weight === "number" ? (v.weight / 10).toFixed(1) : "–"}kg
