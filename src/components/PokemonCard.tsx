@@ -3,7 +3,7 @@ import { Heart, Star, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatPokemonId, formatPokemonName, getTypeColor, formatHeight, formatWeight } from "@/lib/pokemon-api";
+import { formatPokemonId, formatPokemonName, getTypeColor } from "@/lib/pokemon-api";
 import type { Pokemon } from "@/lib/pokemon-api";
 
 interface PokemonCardProps {
@@ -77,9 +77,6 @@ export function PokemonCard({
     };
     return MOVES[base];
   })();
-
-  const heightStr = formatHeight(pokemon.height);
-  const weightStr = formatWeight(pokemon.weight);
 
   return (
     <motion.div
@@ -190,20 +187,6 @@ export function PokemonCard({
               </span>
             </div>
           )}
-
-          {/* Quick Stats */}
-          <div className="mt-3 pt-3 border-t border-border/50">
-            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-              <div className="text-center">
-                <div className="font-medium">Height</div>
-                <div>{heightStr}m</div>
-              </div>
-              <div className="text-center">
-                <div className="font-medium">Weight</div>
-                <div>{weightStr}kg</div>
-              </div>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </motion.div>
