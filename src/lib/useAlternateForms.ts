@@ -14,7 +14,7 @@ type QueueItem = {
 };
 
 // Add: sessionStorage-backed cache for built Pokemon
-const POKEMON_CACHE_KEY = "alternateForms:pokemonCache:v1";
+const POKEMON_CACHE_KEY = "alternateForms:pokemonCache:v2";
 type CachedBuilt = Built;
 
 const pokemonCache: Map<string, CachedBuilt> = (() => {
@@ -64,14 +64,27 @@ async function buildPokemonFromForm(
     const pokemonUrl: string | undefined = formJson?.pokemon?.url;
     if (!pokemonUrl) throw new Error("Missing pokemon url on form");
 
-    // Parse numeric id directly from the linked pokemon URL (avoids a second fetch)
+    // 2) fetch the linked pokemon to obtain accurate per-form types
+    const pokemonJson = await fetch(pokemonUrl).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status} @ pokemon (from form ${formName})`);
+      return r.json();
+    });
+
+    // Parse numeric id directly from the linked pokemon URL (avoids regex on name)
     const idMatch = String(pokemonUrl).match(/\/pokemon\/(\d+)\/?$/);
-    const id = idMatch ? Number(idMatch[1]) : 0;
+    const id = idMatch ? Number(idMatch[1]) : Number(pokemonJson?.id || 0);
 
     const official =
       id > 0
         ? `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`
         : undefined;
+
+    // Extract form-specific types
+    const types: string[] = Array.isArray(pokemonJson?.types)
+      ? pokemonJson.types
+          .map((t: any) => String(t?.type?.name ?? ""))
+          .filter((t: string) => t.length > 0)
+      : [];
 
     // Prefer form name for display (e.g., toxtricity-low-key)
     const out: Built = {
@@ -80,8 +93,8 @@ async function buildPokemonFromForm(
       height: 0,
       weight: 0,
       baseExperience: undefined,
-      // Leave types/abilities empty on grid for speed; modal enhances on demand
-      types: [],
+      // Populate per-form types so Type filter works with Alternate Forms
+      types,
       abilities: [],
       stats: [],
       sprites: {
