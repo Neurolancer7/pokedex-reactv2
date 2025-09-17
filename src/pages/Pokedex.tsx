@@ -296,7 +296,18 @@ export default function Pokedex() {
 
   const [selectedRegion, setSelectedRegion] = useState<string>("all");
 
-  // Add: strict National Dex ranges per region to ensure correct Pokémon set
+  // Add: helper to apply region bounds to any list (enables AND logic with Region + Forms)
+  const applyRegionBounds = React.useCallback(
+    (list: Pokemon[]) => {
+      if (selectedRegion === "all") return list;
+      const bounds = REGION_BOUNDS[selectedRegion] ?? REGION_BOUNDS["all"];
+      return list.filter(
+        (p) => p.pokemonId >= bounds.min && p.pokemonId <= bounds.max
+      );
+    },
+    [selectedRegion]
+  );
+
   const REGION_BOUNDS: Record<string, { min: number; max: number }> = {
     all: { min: 1, max: 1025 },
     kanto: { min: 1, max: 151 },
@@ -719,9 +730,10 @@ export default function Pokedex() {
   };
 
   const filteredMaster = filterByQueryAndTypes(masterList);
-  const filteredMega = filterByQueryAndTypes(megaList);
-  const filteredGmax = filterByQueryAndTypes(gmaxList);
-  const filteredAlt = filterByQueryAndTypes(altItems as unknown as Pokemon[]);
+  // Apply region bounds to form lists too so Region + Types + Forms all combine (AND)
+  const filteredMega = applyRegionBounds(filterByQueryAndTypes(megaList));
+  const filteredGmax = applyRegionBounds(filterByQueryAndTypes(gmaxList));
+  const filteredAlt = applyRegionBounds(filterByQueryAndTypes(altItems as unknown as Pokemon[]));
 
   // Choose the base list for the main grid based on the selected form category
   const baseFilteredList =
