@@ -24,6 +24,12 @@ import { api } from "@/convex/_generated/api";
 import { genderDiffSpecies } from "@/lib/genderDiffSpecies";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+// Add fast in-memory caches at module scope for quick re-open and navigation
+const enhancedCache = new Map<number, Pokemon>();
+const speciesByIdCache = new Map<number, any>();
+const pokemonDetailByIdCache = new Map<number, any>();
+const evolutionChainCache = new Map<number, Array<{ name: string; sprite?: string; id?: number }>>();
+
 interface PokemonDetailModalProps {
   pokemon: Pokemon | null;
   isOpen: boolean;
@@ -85,9 +91,19 @@ export function PokemonDetailModal({
 
   useEffect(() => {
     let mounted = true;
-    setEnhanced(null);
     setShowShiny(false);
     setEvolutionPreview([]);
+
+    const pid = Number(pokemon.pokemonId || 0);
+    if (pid > 0 && enhancedCache.has(pid)) {
+      // Instant hydrate from cache
+      setEnhanced(enhancedCache.get(pid)!);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setEnhanced(null);
 
     const needsDetails =
       !pokemon.stats?.length ||
@@ -95,14 +111,27 @@ export function PokemonDetailModal({
       !pokemon.sprites?.officialArtwork ||
       !pokemon.species?.flavorText;
 
-    if (!needsDetails) return;
+    if (!needsDetails) {
+      // Cache lightweight base for next open to avoid refetch
+      if (pid > 0 && !enhancedCache.has(pid)) enhancedCache.set(pid, pokemon);
+      return () => {
+        mounted = false;
+      };
+    }
 
-    const nameOrId = String(pokemon.name || pokemon.pokemonId);
+    const API = (import.meta as any)?.env?.VITE_POKEAPI_URL || "https://pokeapi.co/api/v2";
 
-    const fetchJson = async (url: string) => {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Failed ${res.status} ${url}`);
-      return res.json();
+    // Fast fetch with timeout
+    const fetchJson = async (url: string, timeoutMs = 12000) => {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal });
+        if (!res.ok) throw new Error(`Failed ${res.status} ${url}`);
+        return await res.json();
+      } finally {
+        clearTimeout(to);
+      }
     };
 
     const normalize = (base: Pokemon, detail: any, species: any): Pokemon => {
@@ -198,66 +227,41 @@ export function PokemonDetailModal({
 
     (async () => {
       try {
-        let detail: any | null = null;
-        let species: any | null = null;
+        const nameOrId = String(pokemon.name || pokemon.pokemonId);
 
-        const API = (import.meta as any)?.env?.VITE_POKEAPI_URL || "https://pokeapi.co/api/v2";
+        // Kick off species fetch immediately by ID (fast + always valid)
+        const speciesPromise = (async () => {
+          if (pid > 0 && speciesByIdCache.has(pid)) return speciesByIdCache.get(pid);
+          const s = await fetchJson(`${API}/pokemon-species/${pid}`).catch(async () => {
+            // fallback to name if id path fails (rare)
+            return await fetchJson(`${API}/pokemon-species/${nameOrId}`);
+          });
+          if (pid > 0) speciesByIdCache.set(pid, s);
+          return s;
+        })();
 
-        const tryFetchPokemon = async (name: string) => {
-          return await fetchJson(`${API}/pokemon/${name}`);
-        };
+        // Detail fetch with quick cache by ID first
+        const detailPromise = (async () => {
+          if (pid > 0 && pokemonDetailByIdCache.has(pid)) return pokemonDetailByIdCache.get(pid);
+          // Try by name first (form-safe), then fallback to id
+          const byName = await fetchJson(`${API}/pokemon/${nameOrId}`).catch(async () => null);
+          const detail = byName ?? (await fetchJson(`${API}/pokemon/${pid}`));
+          if (pid > 0) pokemonDetailByIdCache.set(pid, detail);
+          return detail;
+        })();
 
-        const tryFetchPokemonById = async (id: number) => {
-          return await fetchJson(`${API}/pokemon/${id}`);
-        };
-
-        const tryFetchViaForm = async (formOrName: string) => {
-          const form = await fetchJson(`${API}/pokemon-form/${formOrName}`);
-          const pUrl: string = String(form?.pokemon?.url ?? "");
-          if (!pUrl) throw new Error("Missing linked pokemon url from form");
-          const poke = await fetchJson(pUrl);
-          const linkedName: string = String(poke?.name ?? formOrName);
-          return { poke, linkedName };
-        };
-
-        const tryFetchSpecies = async (name: string) => {
-          try {
-            return await fetchJson(`${API}/pokemon-species/${name}`);
-          } catch {
-            const asNum = Number(name);
-            if (Number.isFinite(asNum) && asNum > 0) {
-              return await fetchJson(`${API}/pokemon-species/${asNum}`);
-            }
-            throw new Error("Species not found");
-          }
-        };
-
-        let pokemonNameForSpecies: string = nameOrId;
-
-        try {
-          detail = await tryFetchPokemon(nameOrId);
-          pokemonNameForSpecies = String(detail?.name ?? nameOrId);
-        } catch {
-          try {
-            const { poke, linkedName } = await tryFetchViaForm(nameOrId);
-            detail = poke;
-            pokemonNameForSpecies = linkedName;
-          } catch {
-            const idNum = Number(pokemon.pokemonId);
-            if (Number.isFinite(idNum) && idNum > 0) {
-              detail = await tryFetchPokemonById(idNum);
-              pokemonNameForSpecies = String(detail?.name ?? pokemonNameForSpecies);
-            } else {
-              detail = null;
-            }
-          }
-        }
-
-        species = await tryFetchSpecies(pokemonNameForSpecies);
+        // Resolve both in parallel
+        const [detail, species] = await Promise.all([detailPromise, speciesPromise]);
 
         if (!mounted) return;
-        setEnhanced(normalize(pokemon, detail ?? {}, species ?? {}));
+        const candidate = normalize(pokemon, detail ?? {}, species ?? {});
+        setEnhanced(candidate);
+        if (pid > 0) enhancedCache.set(pid, candidate);
       } catch {
+        // Ignore; show base info if network fails
+        if (!mounted) return;
+        if (pid > 0 && !enhancedCache.has(pid)) enhancedCache.set(pid, pokemon);
+        setEnhanced(pokemon);
       }
     })();
 
@@ -274,6 +278,12 @@ export function PokemonDetailModal({
       try {
         const evoId = enhanced?.species?.evolutionChainId;
         if (!evoId) return;
+
+        // Instant evolution preview from cache
+        if (evolutionChainCache.has(evoId)) {
+          setEvolutionPreview(evolutionChainCache.get(evoId)!);
+          return;
+        }
 
         const evoRes = await fetch(`${API}/evolution-chain/${evoId}`);
         if (!evoRes.ok) return;
@@ -293,11 +303,9 @@ export function PokemonDetailModal({
         const sprites = await Promise.all(
           names.map(async (nm) => {
             try {
-              // First try the direct pokemon endpoint
               let pd: any | null = null;
               let pr = await fetch(`${API}/pokemon/${nm}`);
               if (!pr.ok) {
-                // Fallback: fetch species to find a default variety (handles cases like "toxtricity")
                 const sr = await fetch(`${API}/pokemon-species/${nm}`);
                 if (!sr.ok) throw new Error("species fail");
                 const sp = await sr.json();
@@ -324,6 +332,7 @@ export function PokemonDetailModal({
 
         if (!mounted) return;
         setEvolutionPreview(sprites);
+        evolutionChainCache.set(evoId, sprites);
       } catch {
       }
     };
