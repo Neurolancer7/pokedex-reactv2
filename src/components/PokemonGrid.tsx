@@ -1,10 +1,11 @@
 import { motion } from "framer-motion";
-import { PokemonCard } from "./PokemonCard";
+import { PokemonCard as BasePokemonCard } from "./PokemonCard";
 import { PokemonDetailModal } from "./PokemonDetailModal";
 import type { Pokemon } from "@/lib/pokemon-api";
 import { useState } from "react";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { memo, useDeferredValue } from "react";
 
 interface PokemonGridProps {
   pokemon: Pokemon[];
@@ -34,6 +35,49 @@ const cardVariants = {
   },
 };
 
+const areCardsEqual = (
+  prev: Readonly<{
+    pokemon: Pokemon;
+    isFavorite?: boolean;
+    onFavoriteToggle?: (pokemonId: number) => void;
+    onClick?: (pokemon: Pokemon) => void;
+  }>,
+  next: Readonly<{
+    pokemon: Pokemon;
+    isFavorite?: boolean;
+    onFavoriteToggle?: (pokemonId: number) => void;
+    onClick?: (pokemon: Pokemon) => void;
+  }>
+) => {
+  // Stable checks for card-critical fields
+  const p = prev.pokemon;
+  const n = next.pokemon;
+
+  if (prev.isFavorite !== next.isFavorite) return false;
+  if (prev.onFavoriteToggle !== next.onFavoriteToggle) return false;
+  if (prev.onClick !== next.onClick) return false;
+
+  if (p.pokemonId !== n.pokemonId) return false;
+  if (p.name !== n.name) return false;
+
+  // Types shallow compare (order preserved)
+  const pt = p.types || [];
+  const nt = n.types || [];
+  if (pt.length !== nt.length) return false;
+  for (let i = 0; i < pt.length; i++) {
+    if (pt[i] !== nt[i]) return false;
+  }
+
+  // Sprite URL that impacts visuals in grid
+  const pSprite = p.sprites?.officialArtwork || p.sprites?.frontDefault || "";
+  const nSprite = n.sprites?.officialArtwork || n.sprites?.frontDefault || "";
+  if (pSprite !== nSprite) return false;
+
+  return true;
+};
+
+const PokemonCard = memo(BasePokemonCard, areCardsEqual);
+
 export function PokemonGrid({ 
   pokemon, 
   favorites, 
@@ -47,6 +91,9 @@ export function PokemonGrid({
   const [selectedPokemon, setSelectedPokemon] = useState<Pokemon | null>(null);
   const [liveMsg, setLiveMsg] = useState<string>("");
   const jumpInputRef = useRef<HTMLInputElement>(null);
+
+  // Defer large list rendering for smoother interactions
+  const deferredPokemon = useDeferredValue(pokemon);
 
   // Track if we've already attempted an auto-fix to avoid loops
   const autoFixedRef = useRef(false);
@@ -224,7 +271,7 @@ export function PokemonGrid({
           animate="visible"
           className={gridClass}
         >
-          {pokemon.map((poke, index) => (
+          {deferredPokemon.map((poke, index) => (
             <motion.div
               key={`${poke.pokemonId}-${poke.name}`}
               variants={cardVariants}
