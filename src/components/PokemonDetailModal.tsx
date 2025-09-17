@@ -23,6 +23,7 @@ import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { genderDiffSpecies } from "@/lib/genderDiffSpecies";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Add fast in-memory caches at module scope for quick re-open and navigation
 const enhancedCache = new Map<number, Pokemon>();
@@ -547,6 +548,14 @@ export function PokemonDetailModal({
   const spriteShiny = data?.sprites?.frontShiny || undefined;
   const currentSprite = showShiny && spriteShiny ? spriteShiny : spriteDefault;
 
+  // Add: lightweight local loading detector for enhanced fetch
+  const needsDetailsLocal =
+    !(Array.isArray(pokemon.stats) && pokemon.stats.length > 0) ||
+    !(Array.isArray(pokemon.abilities) && pokemon.abilities.length > 0) ||
+    !(pokemon.sprites?.officialArtwork) ||
+    !(pokemon.species?.flavorText);
+  const isLoading = !enhanced && needsDetailsLocal;
+
   const isGmax = (() => {
     const n = String(data?.name ?? "").toLowerCase();
     return n.includes("gmax") || n.includes("gigantamax");
@@ -783,652 +792,789 @@ export function PokemonDetailModal({
             </DialogHeader>
 
             {/* Main Content */}
-            <div className="grid md:grid-cols-2 gap-5 sm:gap-6">
-              {/* Left Column */}
-              <div className="space-y-4">
-                {/* Pokemon Image with Shiny toggle */}
-                <div className="relative">
-                  <div
-                    className={`w-full aspect-square rounded-lg flex items-center justify-center
-                      ${isGmax
-                        ? "bg-gradient-to-br from-purple-600/25 via-fuchsia-500/20 to-purple-700/25 ring-2 ring-purple-500/40 shadow-lg shadow-purple-500/30"
-                        : isMega
-                          ? "bg-gradient-to-br from-fuchsia-600/25 via-pink-500/20 to-fuchsia-700/25 ring-2 ring-fuchsia-500/40 shadow-lg shadow-fuchsia-500/30"
-                          : "bg-gradient-to-br from-muted/50 to-muted border-2"}
-                    `}
-                    // Themed ring and shadow for non Mega/G-Max
-                    style={!isGmax && !isMega ? { borderColor: primaryTypeColor + "33", boxShadow: `0 8px 24px ${primaryTypeColor}22` } : undefined}
-                  >
-                    {currentSprite ? (
-                      <motion.img
-                        initial={{ scale: 0.9, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ type: "spring", stiffness: 220, damping: 20 }}
-                        src={currentSprite}
-                        alt={pokemon.name}
-                        className={`w-4/5 h-4/5 object-contain ${isGmax ? "drop-shadow-[0_8px_24px_rgba(168,85,247,0.35)]" : ""}`}
-                      />
-                    ) : (
-                      <div className="text-6xl">❓</div>
+            {isLoading ? (
+              <div
+                role="status"
+                aria-busy="true"
+                className="grid md:grid-cols-2 gap-5 sm:gap-6"
+              >
+                {/* Left Column Skeleton */}
+                <div className="space-y-4">
+                  {/* Image area */}
+                  <div className="relative">
+                    <div className="w-full aspect-square rounded-lg border-2 bg-muted/40 flex items-center justify-center">
+                      <Skeleton className="w-4/5 h-4/5 rounded-md" />
+                    </div>
+                    <div className="mt-3 flex items-center justify-center gap-2">
+                      <Skeleton className="h-8 w-28 rounded-md" />
+                    </div>
+                  </div>
+
+                  {/* Type badges */}
+                  <div className="flex gap-2 justify-center">
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                  </div>
+
+                  {/* Description */}
+                  <div className="p-4 bg-muted/30 rounded-lg">
+                    <Skeleton className="h-5 w-28 mb-2" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-[90%]" />
+                      <Skeleton className="h-3 w-4/5" />
+                    </div>
+                  </div>
+
+                  {/* Species info grid */}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <Skeleton className="h-3 w-20 mb-1" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                    <div>
+                      <Skeleton className="h-3 w-20 mb-1" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                    <div>
+                      <Skeleton className="h-3 w-20 mb-1" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                    <div>
+                      <Skeleton className="h-3 w-20 mb-1" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column Skeleton */}
+                <div className="space-y-6">
+                  {/* Base Stats */}
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <Skeleton className="h-5 w-28" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                    <div className="space-y-3">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="space-y-1">
+                          <div className="flex justify-between items-center text-sm">
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-4 w-10" />
+                          </div>
+                          <Skeleton className="h-2 w-full" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Evolution Chain Preview (skeleton) */}
+                  <div>
+                    <Skeleton className="h-5 w-40 mb-3" />
+                    <div className="flex items-center gap-3 overflow-x-auto pb-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <div className="w-16 h-16 rounded-full bg-muted/50 border flex items-center justify-center">
+                            <Skeleton className="w-12 h-12 rounded-full" />
+                          </div>
+                          {i < 2 && <Skeleton className="h-4 w-4 rounded" />}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Top Moves */}
+                  <div>
+                    <Skeleton className="h-5 w-28 mb-3" />
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <Skeleton key={i} className="h-5 w-20 rounded-full" />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Abilities */}
+                  <div>
+                    <Skeleton className="h-5 w-24 mb-3" />
+                    <div className="space-y-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-muted/30 rounded">
+                          <Skeleton className="h-4 w-28" />
+                          <Skeleton className="h-4 w-12 rounded-full" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Height & Weight */}
+                  <div className="h-w-icons mt-3">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-start gap-3 sm:gap-4">
+                      <div className="text-left p-3 bg-muted/50 rounded-lg w-full sm:min-w-[120px]">
+                        <div className="flex items-center justify-start gap-2.5 mb-1">
+                          <Skeleton className="h-6 w-6 rounded-full" />
+                          <Skeleton className="h-4 w-16" />
+                        </div>
+                        <Skeleton className="h-5 w-12" />
+                      </div>
+                      <div className="text-left p-3 bg-muted/50 rounded-lg w-full sm:min-w-[120px]">
+                        <div className="flex items-center justify-start gap-2.5 mb-1">
+                          <Skeleton className="h-6 w-6 rounded-full" />
+                          <Skeleton className="h-4 w-16" />
+                        </div>
+                        <Skeleton className="h-5 w-12" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-5 sm:gap-6">
+                {/* Left Column */}
+                <div className="space-y-4">
+                  {/* Pokemon Image with Shiny toggle */}
+                  <div className="relative">
+                    <div
+                      className={`w-full aspect-square rounded-lg flex items-center justify-center
+                        ${isGmax
+                          ? "bg-gradient-to-br from-purple-600/25 via-fuchsia-500/20 to-purple-700/25 ring-2 ring-purple-500/40 shadow-lg shadow-purple-500/30"
+                          : isMega
+                            ? "bg-gradient-to-br from-fuchsia-600/25 via-pink-500/20 to-fuchsia-700/25 ring-2 ring-fuchsia-500/40 shadow-lg shadow-fuchsia-500/30"
+                            : "bg-gradient-to-br from-muted/50 to-muted border-2"}
+                      `}
+                      // Themed ring and shadow for non Mega/G-Max
+                      style={!isGmax && !isMega ? { borderColor: primaryTypeColor + "33", boxShadow: `0 8px 24px ${primaryTypeColor}22` } : undefined}
+                    >
+                      {currentSprite ? (
+                        <motion.img
+                          initial={{ scale: 0.9, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ type: "spring", stiffness: 220, damping: 20 }}
+                          src={currentSprite}
+                          alt={pokemon.name}
+                          className={`w-4/5 h-4/5 object-contain ${isGmax ? "drop-shadow-[0_8px_24px_rgba(168,85,247,0.35)]" : ""}`}
+                        />
+                      ) : (
+                        <div className="text-6xl">❓</div>
+                      )}
+                    </div>
+
+                    {/* G-MAX badge */}
+                    {isGmax && (
+                      <div className="absolute -top-2 -left-2">
+                        <span
+                          title="Gigantamax"
+                          aria-label="Gigantamax"
+                          className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-pink-500/40"
+                        >
+                          <img
+                            src="https://harmless-tapir-303.convex.cloud/api/storage/63c94427-b9f7-4312-b254-b148bf2b227e"
+                            alt="Gigantamax"
+                            className="h-6 w-6 object-contain drop-shadow"
+                          />
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Mega badge */}
+                    {isMega && (
+                      <div className="absolute -top-2 -right-2">
+                        <span
+                          title="Mega Evolution"
+                          aria-label="Mega Evolution"
+                          className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-fuchsia-500/40"
+                        >
+                          <img
+                            src="https://harmless-tapir-303.convex.cloud/api/storage/5bccd8f0-8ff6-48ea-9149-b26759dfe4d5"
+                            alt="Mega Evolution"
+                            className="h-6 w-6 object-contain drop-shadow"
+                          />
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Shiny toggle control (only shown if shiny exists) */}
+                    {spriteShiny && (
+                      <div className="mt-3 flex items-center justify-center gap-2">
+                        {(() => {
+                          const baseClass = "transition-colors";
+                          const shinyClass = showShiny
+                            ? (isGmax
+                                ? "bg-purple-600/15 ring-2 ring-purple-500/40"
+                                : isMega
+                                  ? "bg-fuchsia-600/15 ring-2 ring-fuchsia-500/40"
+                                  : isAlternateForm
+                                    ? "bg-sky-600/10 ring-2 ring-sky-500/40"
+                                    : "")
+                            : (isGmax
+                                ? "hover:ring-1 hover:ring-purple-500/30"
+                                : isMega
+                                  ? "hover:ring-1 hover:ring-fuchsia-500/30"
+                                  : isAlternateForm
+                                    ? "hover:ring-1 hover:ring-sky-500/30"
+                                    : "");
+
+                          return (
+                            <Button
+                              variant={showShiny ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setShowShiny((s) => !s)}
+                              aria-pressed={showShiny}
+                              className={`${baseClass} ${shinyClass} h-9 sm:h-8 px-3`}
+                            >
+                              <Sparkles
+                                className={`h-4 w-4 mr-1 ${showShiny ? (isGmax ? "text-purple-500" : isMega ? "text-fuchsia-500" : isAlternateForm ? "text-sky-500" : "text-foreground") : "text-muted-foreground"}`}
+                              />
+                              {showShiny ? "Showing Shiny" : "Show Shiny"}
+                            </Button>
+                          );
+                        })()}
+                      </div>
                     )}
                   </div>
 
-                  {/* G-MAX badge */}
-                  {isGmax && (
-                    <div className="absolute -top-2 -left-2">
-                      <span
-                        title="Gigantamax"
-                        aria-label="Gigantamax"
-                        className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-pink-500/40"
+                  {/* Types */}
+                  <div className="flex gap-2 justify-center">
+                    {typesSafe.map((type) => (
+                      <Badge
+                        key={type}
+                        variant="secondary"
+                        className="px-3 py-1 font-medium"
+                        style={{
+                          backgroundColor: getTypeColor(type) + "20",
+                          color: getTypeColor(type),
+                          borderColor: getTypeColor(type) + "40",
+                        }}
                       >
-                        <img
-                          src="https://harmless-tapir-303.convex.cloud/api/storage/63c94427-b9f7-4312-b254-b148bf2b227e"
-                          alt="Gigantamax"
-                          className="h-6 w-6 object-contain drop-shadow"
-                        />
+                        {formatPokemonName(type)}
+                      </Badge>
+                    ))}
+                  </div>
+
+                  {/* G-MAX Move chip under image */}
+                  {isGmax && gmaxMove && (
+                    <div className="mt-2 text-center">
+                      <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium bg-purple-500/10 text-foreground border-purple-500/30">
+                        G-MAX Move: <span className="ml-1 font-semibold">{gmaxMove}</span>
                       </span>
                     </div>
                   )}
 
-                  {/* Mega badge */}
-                  {isMega && (
-                    <div className="absolute -top-2 -right-2">
-                      <span
-                        title="Mega Evolution"
-                        aria-label="Mega Evolution"
-                        className="inline-flex items-center justify-center rounded-full bg-background border shadow p-1.5 ring-2 ring-fuchsia-500/40"
-                      >
-                        <img
-                          src="https://harmless-tapir-303.convex.cloud/api/storage/5bccd8f0-8ff6-48ea-9149-b26759dfe4d5"
-                          alt="Mega Evolution"
-                          className="h-6 w-6 object-contain drop-shadow"
-                        />
-                      </span>
+                  {/* Description */}
+                  {(data?.species?.flavorText) && (
+                    <div className="p-4 bg-muted/30 rounded-lg">
+                      <h4 className="font-semibold mb-2">Description</h4>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {data.species.flavorText}
+                      </p>
                     </div>
                   )}
 
-                  {/* Shiny toggle control (only shown if shiny exists) */}
-                  {spriteShiny && (
-                    <div className="mt-3 flex items-center justify-center gap-2">
-                      {(() => {
-                        const baseClass = "transition-colors";
-                        const shinyClass = showShiny
-                          ? (isGmax
-                              ? "bg-purple-600/15 ring-2 ring-purple-500/40"
-                              : isMega
-                                ? "bg-fuchsia-600/15 ring-2 ring-fuchsia-500/40"
-                                : isAlternateForm
-                                  ? "bg-sky-600/10 ring-2 ring-sky-500/40"
-                                  : "")
-                          : (isGmax
-                              ? "hover:ring-1 hover:ring-purple-500/30"
-                              : isMega
-                                ? "hover:ring-1 hover:ring-fuchsia-500/30"
-                                : isAlternateForm
-                                  ? "hover:ring-1 hover:ring-sky-500/30"
-                                  : "");
+                  {/* Moved: Additional Info (species data) under Description */}
+                  {(data?.species) && (
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      {isGmax && (
+                        <div>
+                          <div className="text-muted-foreground">Form</div>
+                          <div className="font-medium">Gigantamax</div>
+                        </div>
+                      )}
+                      {isGmax && gmaxMove && (
+                        <div>
+                          <div className="text-muted-foreground">G-MAX Move</div>
+                          <div className="font-medium">{gmaxMove}</div>
+                        </div>
+                      )}
+                      {isMega && (
+                        <div>
+                          <div className="text-muted-foreground">Form</div>
+                          <div className="font-medium">
+                            Mega Evolution{megaVariant ? ` (${megaVariant})` : ""}
+                          </div>
+                        </div>
+                      )}
+                      {generationNumber && (
+                        <>
+                          <div>
+                            <div className="text-muted-foreground">Generation</div>
+                            <div className="font-medium">Gen {generationNumber}</div>
+                          </div>
+                          {regionLabel && (
+                            <div>
+                              <div className="text-muted-foreground">Region</div>
+                              <div className="font-medium">{regionLabel}</div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {data.species.genus && (
+                        <div>
+                          <div className="text-muted-foreground">Species</div>
+                          <div className="font-medium">{data.species.genus}</div>
+                        </div>
+                      )}
+                      {data.species.habitat && (
+                        <div>
+                          <div className="text-muted-foreground">Habitat</div>
+                          <div className="font-medium capitalize">{data.species.habitat}</div>
+                        </div>
+                      )}
+                      {/* Change: Only render Capture Rate when > 0 */}
+                      {(typeof data.species.captureRate === "number" && data.species.captureRate > 0) && (
+                        <div>
+                          <div className="text-muted-foreground">Capture Rate</div>
+                          <div className="font-medium">{data.species.captureRate}</div>
+                        </div>
+                      )}
+                      {/* Only show Base EXP when > 0 to avoid stray "0" */}
+                      {(typeof data.baseExperience === "number" && data.baseExperience > 0) && (
+                        <div>
+                          <div className="text-muted-foreground">Base EXP</div>
+                          <div className="font-medium">{data.baseExperience}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column - Stats and Details */}
+                <div className="space-y-6">
+                  {/* Base Stats */}
+                  <div>
+                    <h4 className="font-semibold mb-4 flex items-center gap-2">
+                      <Activity className="h-4 w-4" />
+                      Base Stats
+                      {statTotal > 0 && (
+                        <span className="ml-auto text-sm text-muted-foreground">
+                          Total: <span className="font-semibold text-foreground">{statTotal}</span>
+                        </span>
+                      )}
+                    </h4>
+                    <div className="space-y-3">
+                      {statsSafe.map((stat) => {
+                        const name = String(stat?.name ?? "stat");
+                        const IconComponent = ((): any => {
+                          switch (name) {
+                            case "hp": return Activity;
+                            case "attack": return Sword;
+                            case "defense": return Shield;
+                            case "special-attack": return Zap;
+                            case "special-defense": return Shield;
+                            case "speed": return Activity;
+                            default: return Activity;
+                          }
+                        })();
+                        const base = Number(stat?.baseStat ?? 0);
+                        const percentage = calculateStatPercentage(base);
 
                         return (
-                          <Button
-                            variant={showShiny ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setShowShiny((s) => !s)}
-                            aria-pressed={showShiny}
-                            className={`${baseClass} ${shinyClass} h-9 sm:h-8 px-3`}
-                          >
-                            <Sparkles
-                              className={`h-4 w-4 mr-1 ${showShiny ? (isGmax ? "text-purple-500" : isMega ? "text-fuchsia-500" : isAlternateForm ? "text-sky-500" : "text-foreground") : "text-muted-foreground"}`}
-                            />
-                            {showShiny ? "Showing Shiny" : "Show Shiny"}
-                          </Button>
+                          <div key={name} className="space-y-1">
+                            <div className="flex justify-between items-center text-sm">
+                              <div className="flex items-center gap-2">
+                                <IconComponent className="h-3 w-3 text-muted-foreground" />
+                                <span className="capitalize font-medium">
+                                  {name.replace("-", " ")}
+                                </span>
+                              </div>
+                              <span className="font-mono font-semibold">{base}</span>
+                            </div>
+                            <Progress value={percentage} className="h-2" />
+                          </div>
                         );
-                      })()}
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Evolution Chain Preview */}
+                  {evolutionPreview.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold mb-3">Evolution Chain</h4>
+                      <div className="flex items-center gap-3 overflow-x-auto pb-2">
+                        {evolutionPreview.map((s, i) => (
+                          <div key={`${s.name}-${i}`} className="flex items-center gap-3">
+                            <div className="flex flex-col items-center">
+                              <div className="w-16 h-16 rounded-full bg-muted/50 border flex items-center justify-center">
+                                {s.sprite ? (
+                                  <img
+                                    src={s.sprite}
+                                    alt={s.name}
+                                    className="w-12 h-12 object-contain"
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <div className="text-xs text-muted-foreground">No Img</div>
+                                )}
+                              </div>
+                              <div className="mt-1 text-xs font-medium capitalize">
+                                {formatPokemonName(s.name)}
+                              </div>
+                            </div>
+                            {i < evolutionPreview.length - 1 && (
+                              <div className="text-muted-foreground">→</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
-                </div>
 
-                {/* Types */}
-                <div className="flex gap-2 justify-center">
-                  {typesSafe.map((type) => (
-                    <Badge
-                      key={type}
-                      variant="secondary"
-                      className="px-3 py-1 font-medium"
-                      style={{
-                        backgroundColor: getTypeColor(type) + "20",
-                        color: getTypeColor(type),
-                        borderColor: getTypeColor(type) + "40",
-                      }}
-                    >
-                      {formatPokemonName(type)}
-                    </Badge>
-                  ))}
-                </div>
-
-                {/* G-MAX Move chip under image */}
-                {isGmax && gmaxMove && (
-                  <div className="mt-2 text-center">
-                    <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium bg-purple-500/10 text-foreground border-purple-500/30">
-                      G-MAX Move: <span className="ml-1 font-semibold">{gmaxMove}</span>
-                    </span>
-                  </div>
-                )}
-
-                {/* Description */}
-                {(data?.species?.flavorText) && (
-                  <div className="p-4 bg-muted/30 rounded-lg">
-                    <h4 className="font-semibold mb-2">Description</h4>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {data.species.flavorText}
-                    </p>
-                  </div>
-                )}
-
-                {/* Moved: Additional Info (species data) under Description */}
-                {(data?.species) && (
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    {isGmax && (
-                      <div>
-                        <div className="text-muted-foreground">Form</div>
-                        <div className="font-medium">Gigantamax</div>
-                      </div>
-                    )}
-                    {isGmax && gmaxMove && (
-                      <div>
-                        <div className="text-muted-foreground">G-MAX Move</div>
-                        <div className="font-medium">{gmaxMove}</div>
-                      </div>
-                    )}
-                    {isMega && (
-                      <div>
-                        <div className="text-muted-foreground">Form</div>
-                        <div className="font-medium">
-                          Mega Evolution{megaVariant ? ` (${megaVariant})` : ""}
+                  {/* Base Form (for Mega evolutions) */}
+                  {isMega && baseFormPreview && (
+                    <div>
+                      <h4 className="font-semibold mb-3">Base Form</h4>
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 rounded-full bg-muted/50 border flex items-center justify-center">
+                          {baseFormPreview.sprite ? (
+                            <img
+                              src={baseFormPreview.sprite}
+                              alt={baseFormPreview.name}
+                              className="w-12 h-12 object-contain"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="text-xs text-muted-foreground">No Img</div>
+                          )}
                         </div>
-                      </div>
-                    )}
-                    {generationNumber && (
-                      <>
-                        <div>
-                          <div className="text-muted-foreground">Generation</div>
-                          <div className="font-medium">Gen {generationNumber}</div>
-                        </div>
-                        {regionLabel && (
-                          <div>
-                            <div className="text-muted-foreground">Region</div>
-                            <div className="font-medium">{regionLabel}</div>
+                        <div className="flex flex-col">
+                          <div className="text-sm font-medium capitalize">
+                            {formatPokemonName(baseFormPreview.name)}
                           </div>
-                        )}
-                      </>
-                    )}
-                    {data.species.genus && (
-                      <div>
-                        <div className="text-muted-foreground">Species</div>
-                        <div className="font-medium">{data.species.genus}</div>
-                      </div>
-                    )}
-                    {data.species.habitat && (
-                      <div>
-                        <div className="text-muted-foreground">Habitat</div>
-                        <div className="font-medium capitalize">{data.species.habitat}</div>
-                      </div>
-                    )}
-                    {/* Change: Only render Capture Rate when > 0 */}
-                    {(typeof data.species.captureRate === "number" && data.species.captureRate > 0) && (
-                      <div>
-                        <div className="text-muted-foreground">Capture Rate</div>
-                        <div className="font-medium">{data.species.captureRate}</div>
-                      </div>
-                    )}
-                    {/* Only show Base EXP when > 0 to avoid stray "0" */}
-                    {(typeof data.baseExperience === "number" && data.baseExperience > 0) && (
-                      <div>
-                        <div className="text-muted-foreground">Base EXP</div>
-                        <div className="font-medium">{data.baseExperience}</div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Right Column - Stats and Details */}
-              <div className="space-y-6">
-                {/* Base Stats */}
-                <div>
-                  <h4 className="font-semibold mb-4 flex items-center gap-2">
-                    <Activity className="h-4 w-4" />
-                    Base Stats
-                    {statTotal > 0 && (
-                      <span className="ml-auto text-sm text-muted-foreground">
-                        Total: <span className="font-semibold text-foreground">{statTotal}</span>
-                      </span>
-                    )}
-                  </h4>
-                  <div className="space-y-3">
-                    {statsSafe.map((stat) => {
-                      const name = String(stat?.name ?? "stat");
-                      const IconComponent = ((): any => {
-                        switch (name) {
-                          case "hp": return Activity;
-                          case "attack": return Sword;
-                          case "defense": return Shield;
-                          case "special-attack": return Zap;
-                          case "special-defense": return Shield;
-                          case "speed": return Activity;
-                          default: return Activity;
-                        }
-                      })();
-                      const base = Number(stat?.baseStat ?? 0);
-                      const percentage = calculateStatPercentage(base);
-
-                      return (
-                        <div key={name} className="space-y-1">
-                          <div className="flex justify-between items-center text-sm">
-                            <div className="flex items-center gap-2">
-                              <IconComponent className="h-3 w-3 text-muted-foreground" />
-                              <span className="capitalize font-medium">
-                                {name.replace("-", " ")}
-                              </span>
+                          {typeof baseFormPreview.id === "number" && (
+                            <div className="text-xs text-muted-foreground">
+                              #{formatPokemonId(baseFormPreview.id)}
                             </div>
-                            <span className="font-mono font-semibold">{base}</span>
-                          </div>
-                          <Progress value={percentage} className="h-2" />
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                      </div>
+                    </div>
+                  )}
 
-                {/* Evolution Chain Preview */}
-                {evolutionPreview.length > 0 && (
+                  {/* Top Moves (preview) */}
+                  {(() => {
+                    const topMoves = movesSafe.slice(0, 10);
+                    if (topMoves.length === 0) return null;
+                    return (
+                      <div>
+                        <h4 className="font-semibold mb-3">Top Moves</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {topMoves.map((m, idx) => (
+                            <Badge key={`${m}-${idx}`} variant="outline" className="capitalize">
+                              {String(m).replace("-", " ")}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Abilities */}
                   <div>
-                    <h4 className="font-semibold mb-3">Evolution Chain</h4>
-                    <div className="flex items-center gap-3 overflow-x-auto pb-2">
-                      {evolutionPreview.map((s, i) => (
-                        <div key={`${s.name}-${i}`} className="flex items-center gap-3">
-                          <div className="flex flex-col items-center">
-                            <div className="w-16 h-16 rounded-full bg-muted/50 border flex items-center justify-center">
-                              {s.sprite ? (
-                                <img
-                                  src={s.sprite}
-                                  alt={s.name}
-                                  className="w-12 h-12 object-contain"
-                                  loading="lazy"
-                                />
-                              ) : (
-                                <div className="text-xs text-muted-foreground">No Img</div>
-                              )}
-                            </div>
-                            <div className="mt-1 text-xs font-medium capitalize">
-                              {formatPokemonName(s.name)}
-                            </div>
-                          </div>
-                          {i < evolutionPreview.length - 1 && (
-                            <div className="text-muted-foreground">→</div>
+                    <h4 className="font-semibold mb-3">Abilities</h4>
+                    <div className="space-y-2">
+                      {abilitiesSafe.map((ability, index) => (
+                        <div
+                          key={`${ability.name}-${index}`}
+                          className="flex items-center justify-between p-2 bg-muted/30 rounded"
+                        >
+                          <span className="capitalize font-medium">
+                            {String(ability.name).replace("-", " ")}
+                          </span>
+                          {ability.isHidden && (
+                            <Badge variant="outline" className="text-xs">
+                              Hidden
+                            </Badge>
                           )}
                         </div>
                       ))}
                     </div>
                   </div>
-                )}
 
-                {/* Base Form (for Mega evolutions) */}
-                {isMega && baseFormPreview && (
-                  <div>
-                    <h4 className="font-semibold mb-3">Base Form</h4>
-                    <div className="flex items-center gap-3">
-                      <div className="w-16 h-16 rounded-full bg-muted/50 border flex items-center justify-center">
-                        {baseFormPreview.sprite ? (
-                          <img
-                            src={baseFormPreview.sprite}
-                            alt={baseFormPreview.name}
-                            className="w-12 h-12 object-contain"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="text-xs text-muted-foreground">No Img</div>
-                        )}
-                      </div>
-                      <div className="flex flex-col">
-                        <div className="text-sm font-medium capitalize">
-                          {formatPokemonName(baseFormPreview.name)}
+                  {/* Height & Weight moved here, right-aligned */}
+                  <div className="h-w-icons mt-3">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-start gap-3 sm:gap-4">
+                      <div className="text-left p-3 bg-muted/50 rounded-lg w-full sm:min-w-[120px]">
+                        <div className="flex items-center justify-start gap-2.5 mb-1 text-muted-foreground">
+                          {/* Styled icon chip using primary type color */}
+                          <span
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
+                            style={{
+                              backgroundColor: primaryTypeColor + "15",
+                              borderColor: primaryTypeColor + "40",
+                            }}
+                            aria-hidden="true"
+                          >
+                            <Ruler
+                              className="h-3.5 w-3.5"
+                              style={{ color: primaryTypeColor }}
+                            />
+                          </span>
+                          <span className="text-sm whitespace-nowrap leading-none">Height</span>
                         </div>
-                        {typeof baseFormPreview.id === "number" && (
-                          <div className="text-xs text-muted-foreground">
-                            #{formatPokemonId(baseFormPreview.id)}
-                          </div>
-                        )}
+                        <div className="font-semibold">{heightM}m</div>
+                      </div>
+                      <div className="text-left p-3 bg-muted/50 rounded-lg w-full sm:min-w-[120px]">
+                        <div className="flex items-center justify-start gap-2.5 mb-1 text-muted-foreground">
+                          {/* Styled icon chip using primary type color */}
+                          <span
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
+                            style={{
+                              backgroundColor: primaryTypeColor + "15",
+                              borderColor: primaryTypeColor + "40",
+                            }}
+                            aria-hidden="true"
+                          >
+                            <Weight
+                              className="h-3.5 w-3.5"
+                              style={{ color: primaryTypeColor }}
+                            />
+                          </span>
+                          <span className="text-sm whitespace-nowrap leading-none">Weight</span>
+                        </div>
+                        <div className="font-semibold">{weightKg}kg</div>
                       </div>
                     </div>
                   </div>
-                )}
 
-                {/* Top Moves (preview) */}
-                {(() => {
-                  const topMoves = movesSafe.slice(0, 10);
-                  if (topMoves.length === 0) return null;
-                  return (
-                    <div>
-                      <h4 className="font-semibold mb-3">Top Moves</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {topMoves.map((m, idx) => (
-                          <Badge key={`${m}-${idx}`} variant="outline" className="capitalize">
-                            {String(m).replace("-", " ")}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Abilities */}
-                <div>
-                  <h4 className="font-semibold mb-3">Abilities</h4>
-                  <div className="space-y-2">
-                    {abilitiesSafe.map((ability, index) => (
-                      <div
-                        key={`${ability.name}-${index}`}
-                        className="flex items-center justify-between p-2 bg-muted/30 rounded"
-                      >
-                        <span className="capitalize font-medium">
-                          {String(ability.name).replace("-", " ")}
-                        </span>
-                        {ability.isHidden && (
-                          <Badge variant="outline" className="text-xs">
-                            Hidden
-                          </Badge>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Height & Weight moved here, right-aligned */}
-                <div className="h-w-icons mt-3">
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-start gap-3 sm:gap-4">
-                    <div className="text-left p-3 bg-muted/50 rounded-lg w-full sm:min-w-[120px]">
-                      <div className="flex items-center justify-start gap-2.5 mb-1 text-muted-foreground">
-                        {/* Styled icon chip using primary type color */}
-                        <span
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
-                          style={{
-                            backgroundColor: primaryTypeColor + "15",
-                            borderColor: primaryTypeColor + "40",
-                          }}
-                          aria-hidden="true"
-                        >
-                          <Ruler
-                            className="h-3.5 w-3.5"
-                            style={{ color: primaryTypeColor }}
-                          />
-                        </span>
-                        <span className="text-sm whitespace-nowrap leading-none">Height</span>
-                      </div>
-                      <div className="font-semibold">{heightM}m</div>
-                    </div>
-                    <div className="text-left p-3 bg-muted/50 rounded-lg w-full sm:min-w-[120px]">
-                      <div className="flex items-center justify-start gap-2.5 mb-1 text-muted-foreground">
-                        {/* Styled icon chip using primary type color */}
-                        <span
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
-                          style={{
-                            backgroundColor: primaryTypeColor + "15",
-                            borderColor: primaryTypeColor + "40",
-                          }}
-                          aria-hidden="true"
-                        >
-                          <Weight
-                            className="h-3.5 w-3.5"
-                            style={{ color: primaryTypeColor }}
-                          />
-                        </span>
-                        <span className="text-sm whitespace-nowrap leading-none">Weight</span>
-                      </div>
-                      <div className="font-semibold">{weightKg}kg</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Gender Differences (only when filter is active AND species in whitelist) */}
-                {showGenderDifferences && inGenderDiffWhitelist && (
-                  <div
-                    className={`p-4 rounded-lg border ${
-                      isGmax
-                        ? "bg-gradient-to-br from-purple-600/20 via-fuchsia-500/10 to-purple-700/20 border-purple-500/40"
-                        : isMega
-                        ? "bg-gradient-to-br from-fuchsia-600/20 via-pink-500/10 to-fuchsia-700/20 border-fuchsia-500/40"
-                        : "bg-muted/30"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <img
-                          src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
-                          alt=""
-                          className="h-4 w-4 opacity-70"
-                        />
-                        <h4 className="font-semibold">Gender Differences</h4>
-                      </div>
-                      {gdSource && (
-                        <a
-                          href={gdSource}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs underline text-muted-foreground hover:text-foreground"
-                          aria-label="Open Bulbapedia source"
-                        >
-                          Source
-                        </a>
-                      )}
-                    </div>
-
-                    {gdLoading && (
-                      <div className="w-full flex items-center justify-center py-3">
-                        <div className="h-10 w-10 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md flex items-center justify-center animate-pulse">
+                  {/* Gender Differences (only when filter is active AND species in whitelist) */}
+                  {showGenderDifferences && inGenderDiffWhitelist && (
+                    <div
+                      className={`p-4 rounded-lg border ${
+                        isGmax
+                          ? "bg-gradient-to-br from-purple-600/20 via-fuchsia-500/10 to-purple-700/20 border-purple-500/40"
+                          : isMega
+                            ? "bg-gradient-to-br from-fuchsia-600/20 via-pink-500/10 to-fuchsia-700/20 border-fuchsia-500/40"
+                            : "bg-muted/30"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
                           <img
                             src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
-                            alt="Loading Pokéball"
-                            className="h-7 w-7 animate-bounce-spin drop-shadow"
+                            alt=""
+                            className="h-4 w-4 opacity-70"
                           />
+                          <h4 className="font-semibold">Gender Differences</h4>
                         </div>
+                        {gdSource && (
+                          <a
+                            href={gdSource}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs underline text-muted-foreground hover:text-foreground"
+                            aria-label="Open Bulbapedia source"
+                          >
+                            Source
+                          </a>
+                        )}
                       </div>
-                    )}
 
-                    {!gdLoading && gdError && (
-                      <p className="text-sm text-muted-foreground">
-                        No known visual gender differences.
-                      </p>
-                    )}
-
-                    {!gdLoading && !gdError && (
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        {gdText || "No known visual gender differences."}
-                      </p>
-                    )}
-
-                    <div className="mt-2 text-[11px] text-muted-foreground">
-                      Descriptions sourced from{" "}
-                      <a
-                        href={gdSource || "https://bulbapedia.bulbagarden.net/"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline"
-                      >
-                        Bulbapedia
-                      </a>
-                      .
-                    </div>
-                  </div>
-                )}
-
-                {/* Gender Differences Panel */}
-                {genderPanelOpen && (
-                  <div className="mt-3 p-3 rounded-lg border bg-gradient-to-br from-pink-500/15 to-purple-500/15">
-                    {gvLoading && (
-                      <div className="w-full flex items-center justify-center py-3" aria-busy="true" aria-live="polite">
-                        <div className="px-4 h-10 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow border border-white/10 flex items-center justify-center animate-pulse">
-                          <div className="h-8 w-8 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow flex items-center justify-center">
+                      {gdLoading && (
+                        <div className="w-full flex items-center justify-center py-3">
+                          <div className="h-10 w-10 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow-md flex items-center justify-center animate-pulse">
                             <img
                               src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
                               alt="Loading Pokéball"
-                              className="h-6 w-6 animate-bounce-spin drop-shadow"
+                              className="h-7 w-7 animate-bounce-spin drop-shadow"
                             />
                           </div>
-                          <span className="ml-2 text-xs">Loading gender variants…</span>
                         </div>
+                      )}
+
+                      {!gdLoading && gdError && (
+                        <p className="text-sm text-muted-foreground">
+                          No known visual gender differences.
+                        </p>
+                      )}
+
+                      {!gdLoading && !gdError && (
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          {gdText || "No known visual gender differences."}
+                        </p>
+                      )}
+
+                      <div className="mt-2 text-[11px] text-muted-foreground">
+                        Descriptions sourced from{" "}
+                        <a
+                          href={gdSource || "https://bulbapedia.bulbagarden.net/"}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline"
+                        >
+                          Bulbapedia
+                        </a>
+                        .
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {!gvLoading && gvError && (
-                      <div className="text-sm text-muted-foreground">
-                        Failed to load gender variants. Showing default details.
-                      </div>
-                    )}
+                  {/* Gender Differences Panel */}
+                  {genderPanelOpen && (
+                    <div className="mt-3 p-3 rounded-lg border bg-gradient-to-br from-pink-500/15 to-purple-500/15">
+                      {gvLoading && (
+                        <div className="w-full flex items-center justify-center py-3" aria-busy="true" aria-live="polite">
+                          <div className="px-4 h-10 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow border border-white/10 flex items-center justify-center animate-pulse">
+                            <div className="h-8 w-8 rounded-full bg-white/10 backdrop-blur ring-2 ring-white/40 shadow flex items-center justify-center">
+                              <img
+                                src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png"
+                                alt="Loading Pokéball"
+                                className="h-6 w-6 animate-bounce-spin drop-shadow"
+                              />
+                            </div>
+                            <span className="ml-2 text-xs">Loading gender variants…</span>
+                          </div>
+                        </div>
+                      )}
 
-                    {!gvLoading && !gvError && Array.isArray(genderVariants) && genderVariants.length > 0 && (
-                      <Tabs defaultValue="male" className="w-full">
-                        <TabsList className="grid grid-cols-2 w-full">
-                          <TabsTrigger value="male">Male</TabsTrigger>
-                          <TabsTrigger value="female">Female</TabsTrigger>
-                        </TabsList>
-                        {genderVariants.map((v, idx) => {
-                          const value = v.isMale ? "male" : "female";
-                          return (
-                            <TabsContent key={`${value}-${idx}`} value={value} className="mt-3">
-                              <div className="grid sm:grid-cols-2 gap-4">
-                                {/* Sprite */}
-                                <div className="w-full flex items-center justify-center">
-                                  <div className="w-52 h-52 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted rounded-lg border">
-                                    <img
-                                      src={v.sprite}
-                                      alt={`${(enhanced ?? pokemon)?.name} ${value}`}
-                                      className="w-44 h-44 object-contain"
-                                      onError={(e) => {
-                                        const img = e.currentTarget as HTMLImageElement;
-                                        img.src = v.isMale === false
-                                          ? genderSpriteUrl(v.id || baseDexId, "female")
-                                          : genderSpriteUrl(v.id || baseDexId, "male");
-                                      }}
-                                    />
-                                  </div>
-                                </div>
+                      {!gvLoading && gvError && (
+                        <div className="text-sm text-muted-foreground">
+                          Failed to load gender variants. Showing default details.
+                        </div>
+                      )}
 
-                                {/* Info */}
-                                <div className="space-y-3">
-                                  {/* Types */}
-                                  <div className="flex gap-2 flex-wrap">
-                                    {v.types.map((t) => (
-                                      <Badge
-                                        key={`${value}-${t}`}
-                                        variant="secondary"
-                                        className="px-3 py-1 font-medium"
-                                        style={{
-                                          backgroundColor: getTypeColor(t) + "20",
-                                          color: getTypeColor(t),
-                                          borderColor: getTypeColor(t) + "40",
+                      {!gvLoading && !gvError && Array.isArray(genderVariants) && genderVariants.length > 0 && (
+                        <Tabs defaultValue="male" className="w-full">
+                          <TabsList className="grid grid-cols-2 w-full">
+                            <TabsTrigger value="male">Male</TabsTrigger>
+                            <TabsTrigger value="female">Female</TabsTrigger>
+                          </TabsList>
+                          {genderVariants.map((v, idx) => {
+                            const value = v.isMale ? "male" : "female";
+                            return (
+                              <TabsContent key={`${value}-${idx}`} value={value} className="mt-3">
+                                <div className="grid sm:grid-cols-2 gap-4">
+                                  {/* Sprite */}
+                                  <div className="w-full flex items-center justify-center">
+                                    <div className="w-52 h-52 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted rounded-lg border">
+                                      <img
+                                        src={v.sprite}
+                                        alt={`${(enhanced ?? pokemon)?.name} ${value}`}
+                                        className="w-44 h-44 object-contain"
+                                        onError={(e) => {
+                                          const img = e.currentTarget as HTMLImageElement;
+                                          img.src = v.isMale === false
+                                            ? genderSpriteUrl(v.id || baseDexId, "female")
+                                            : genderSpriteUrl(v.id || baseDexId, "male");
                                         }}
-                                      >
-                                        {formatPokemonName(t)}
-                                      </Badge>
-                                    ))}
-                                  </div>
-
-                                  {/* Height/Weight */}
-                                  <div className="grid grid-cols-2 gap-3">
-                                    <div className="text-center p-2 bg-muted/50 rounded-lg">
-                                      {/* Softer icon chip for variant cards */}
-                                      <span
-                                        className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
-                                        style={{
-                                          backgroundColor: primaryTypeColor + "10",
-                                          borderColor: primaryTypeColor + "30",
-                                        }}
-                                        aria-hidden="true"
-                                      >
-                                        <Ruler
-                                          className="h-3.5 w-3.5"
-                                          style={{ color: primaryTypeColor }}
-                                        />
-                                      </span>
-                                      <div className="text-xs text-muted-foreground leading-none">Height</div>
-                                      <div className="font-semibold">
-                                        {typeof v.height === "number" ? (v.height / 10).toFixed(1) : "–"}m
-                                      </div>
-                                    </div>
-                                    <div className="text-center p-2 bg-muted/50 rounded-lg">
-                                      {/* Softer icon chip for variant cards */}
-                                      <span
-                                        className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
-                                        style={{
-                                          backgroundColor: primaryTypeColor + "10",
-                                          borderColor: primaryTypeColor + "30",
-                                        }}
-                                        aria-hidden="true"
-                                      >
-                                        <Weight
-                                          className="h-3.5 w-3.5"
-                                          style={{ color: primaryTypeColor }}
-                                        />
-                                      </span>
-                                      <div className="text-xs text-muted-foreground leading-none">Weight</div>
-                                      <div className="font-semibold">
-                                        {typeof v.weight === "number" ? (v.weight / 10).toFixed(1) : "–"}kg
-                                      </div>
+                                      />
                                     </div>
                                   </div>
 
-                                  {/* Stats */}
-                                  <div>
-                                    <h5 className="font-semibold mb-2 text-sm">Base Stats</h5>
-                                    <div className="space-y-2">
-                                      {v.stats.map((s) => {
-                                        const nm = String(s?.name ?? "stat");
-                                        const base = Number(s?.baseStat ?? 0);
-                                        const percentage = calculateStatPercentage(base);
-                                        const IconComponent = ((): any => {
-                                          switch (nm) {
-                                            case "hp": return Activity;
-                                            case "attack": return Sword;
-                                            case "defense": return Shield;
-                                            case "special-attack": return Zap;
-                                            case "special-defense": return Shield;
-                                            case "speed": return Activity;
-                                            default: return Activity;
-                                          }
-                                        })();
-                                        return (
-                                          <div key={`${value}-${nm}`} className="space-y-0.5">
-                                            <div className="flex justify-between items-center text-xs">
-                                              <div className="flex items-center gap-2">
-                                                <IconComponent className="h-3 w-3 text-muted-foreground" />
-                                                <span className="capitalize font-medium">
-                                                  {nm.replace("-", " ")}
-                                                </span>
+                                  {/* Info */}
+                                  <div className="space-y-3">
+                                    {/* Types */}
+                                    <div className="flex gap-2 flex-wrap">
+                                      {v.types.map((t) => (
+                                        <Badge
+                                          key={`${value}-${t}`}
+                                          variant="secondary"
+                                          className="px-3 py-1 font-medium"
+                                          style={{
+                                            backgroundColor: getTypeColor(t) + "20",
+                                            color: getTypeColor(t),
+                                            borderColor: getTypeColor(t) + "40",
+                                          }}
+                                        >
+                                          {formatPokemonName(t)}
+                                        </Badge>
+                                      ))}
+                                    </div>
+
+                                    {/* Height/Weight */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div className="text-center p-2 bg-muted/50 rounded-lg">
+                                        {/* Softer icon chip for variant cards */}
+                                        <span
+                                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
+                                          style={{
+                                            backgroundColor: primaryTypeColor + "10",
+                                            borderColor: primaryTypeColor + "30",
+                                          }}
+                                          aria-hidden="true"
+                                        >
+                                          <Ruler
+                                            className="h-3.5 w-3.5"
+                                            style={{ color: primaryTypeColor }}
+                                          />
+                                        </span>
+                                        <div className="text-xs text-muted-foreground leading-none">Height</div>
+                                        <div className="font-semibold">
+                                          {typeof v.height === "number" ? (v.height / 10).toFixed(1) : "–"}m
+                                        </div>
+                                      </div>
+                                      <div className="text-center p-2 bg-muted/50 rounded-lg">
+                                        {/* Softer icon chip for variant cards */}
+                                        <span
+                                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
+                                          style={{
+                                            backgroundColor: primaryTypeColor + "10",
+                                            borderColor: primaryTypeColor + "30",
+                                          }}
+                                          aria-hidden="true"
+                                        >
+                                          <Weight
+                                            className="h-3.5 w-3.5"
+                                            style={{ color: primaryTypeColor }}
+                                          />
+                                        </span>
+                                        <div className="text-xs text-muted-foreground leading-none">Weight</div>
+                                        <div className="font-semibold">
+                                          {typeof v.weight === "number" ? (v.weight / 10).toFixed(1) : "–"}kg
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Stats */}
+                                    <div>
+                                      <h5 className="font-semibold mb-2 text-sm">Base Stats</h5>
+                                      <div className="space-y-2">
+                                        {v.stats.map((s) => {
+                                          const nm = String(s?.name ?? "stat");
+                                          const base = Number(s?.baseStat ?? 0);
+                                          const percentage = calculateStatPercentage(base);
+                                          const IconComponent = ((): any => {
+                                            switch (nm) {
+                                              case "hp": return Activity;
+                                              case "attack": return Sword;
+                                              case "defense": return Shield;
+                                              case "special-attack": return Zap;
+                                              case "special-defense": return Shield;
+                                              case "speed": return Activity;
+                                              default: return Activity;
+                                            }
+                                          })();
+                                          return (
+                                            <div key={`${value}-${nm}`} className="space-y-0.5">
+                                              <div className="flex justify-between items-center text-xs">
+                                                <div className="flex items-center gap-2">
+                                                  <IconComponent className="h-3 w-3 text-muted-foreground" />
+                                                  <span className="capitalize font-medium">
+                                                    {nm.replace("-", " ")}
+                                                  </span>
+                                                </div>
+                                                <span className="font-mono font-semibold">{base}</span>
                                               </div>
-                                              <span className="font-mono font-semibold">{base}</span>
+                                              <Progress value={percentage} className="h-2" />
                                             </div>
-                                            <Progress value={percentage} className="h-2" />
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                    {!v.hasSeparateStats && (
-                                      <div className="mt-2 text-[11px] text-muted-foreground">
-                                        No separate stats for this gender. Showing default stats.
+                                          );
+                                        })}
                                       </div>
-                                    )}
+                                      {!v.hasSeparateStats && (
+                                        <div className="mt-2 text-[11px] text-muted-foreground">
+                                          No separate stats for this gender. Showing default stats.
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </TabsContent>
-                          );
-                        })}
-                      </Tabs>
-                    )}
-                  </div>
-                )}
+                              </TabsContent>
+                            );
+                          })}
+                        </Tabs>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </ScrollArea>
       </DialogContent>
