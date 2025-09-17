@@ -119,7 +119,36 @@ function gmaxToPokemon(g: GigantamaxPokemon): Pokemon {
 }
 
 async function buildPokemonFromFormName(fetcher: <T>(u: string) => Promise<T>, fname: string) {
-  // Add: resolve via pokemon endpoint first, then fallback to pokemon-form -> pokemon, then species default variety
+  // Add: map species that lack direct /pokemon endpoints to their default variety first to avoid 404s
+  const defaultVarietyMap: Record<string, string> = {
+    // Common species whose canonical default variety doesn't match species slug
+    toxtricity: "toxtricity-amped",
+    tornadus: "tornadus-incarnate",
+    thundurus: "thundurus-incarnate",
+    landorus: "landorus-incarnate",
+    enamorus: "enamorus-incarnate",
+    giratina: "giratina-altered",
+    shaymin: "shaymin-land",
+    darmanitan: "darmanitan-standard",
+    aegislash: "aegislash-shield",
+    indeedee: "indeedee-male",
+    meowstic: "meowstic-male",
+    meloetta: "meloetta-aria",
+    oricorio: "oricorio-baile",
+    eiscue: "eiscue-ice",
+    zygarde: "zygarde-50",
+    wishiwashi: "wishiwashi-solo",
+    lycanroc: "lycanroc-midday",
+    minior: "minior-red-meteor",
+  };
+
+  const normalizeName = (n: string) => {
+    const s = String(n || "").toLowerCase().trim();
+    // Special-case Unown: always resolve to base "unown"
+    if (s.startsWith("unown")) return "unown";
+    return defaultVarietyMap[s] ?? s;
+  };
+
   const tryFetchPokemon = async (name: string): Promise<any> => {
     return await fetcher<any>(`https://pokeapi.co/api/v2/pokemon/${name}`);
   };
@@ -142,14 +171,30 @@ async function buildPokemonFromFormName(fetcher: <T>(u: string) => Promise<T>, f
   };
 
   let pokemonJson: any = null;
-  try {
-    pokemonJson = await tryFetchPokemon(fname);
-  } catch {
+
+  // Prefer mapped canonical default variety first to avoid initial 404s
+  const canonical = normalizeName(fname);
+  if (canonical !== fname) {
     try {
-      pokemonJson = await tryFetchViaForm(fname);
+      pokemonJson = await tryFetchPokemon(canonical);
     } catch {
-      // Final fallback: species -> default variety -> pokemon (handles names like "toxtricity")
-      pokemonJson = await tryFetchViaSpecies(fname);
+      // Skip hitting /pokemon/fname when we know it 404s; go to form -> species fallback
+      try {
+        pokemonJson = await tryFetchViaForm(fname);
+      } catch {
+        pokemonJson = await tryFetchViaSpecies(fname);
+      }
+    }
+  } else {
+    // Original order: try pokemon -> form -> species
+    try {
+      pokemonJson = await tryFetchPokemon(fname);
+    } catch {
+      try {
+        pokemonJson = await tryFetchViaForm(fname);
+      } catch {
+        pokemonJson = await tryFetchViaSpecies(fname);
+      }
     }
   }
 
