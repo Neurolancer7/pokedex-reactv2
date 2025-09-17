@@ -17,13 +17,14 @@ import { Separator } from "@/components/ui/separator";
 import { formatPokemonId, formatPokemonName, getTypeColor, calculateStatPercentage } from "@/lib/pokemon-api";
 import type { Pokemon } from "@/lib/pokemon-api";
 import { POKEMON_GENERATIONS } from "@/lib/pokemon-api";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { genderDiffSpecies } from "@/lib/genderDiffSpecies";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 
 // Add fast in-memory caches at module scope for quick re-open and navigation
 const enhancedCache = new Map<number, Pokemon>();
@@ -79,6 +80,8 @@ export function PokemonDetailModal({
   const [gvLoading, setGvLoading] = useState(false);
   const [gvError, setGvError] = useState<string | null>(null);
   const [genderVariants, setGenderVariants] = useState<GenderVariant[] | null>(null);
+  // Add: prevent repeated error toasts per modal open
+  const errorNotifiedRef = useRef(false);
 
   const fetchGenderDifference = useAction(api.genderDiffActions.fetchGenderDifference);
   const [gdLoading, setGdLoading] = useState(false);
@@ -357,6 +360,11 @@ export function PokemonDetailModal({
         setEvolutionPreview(sprites);
         evolutionChainCache.set(evoId, sprites);
       } catch {
+        // Add toast notification for evolution chain loading errors (guarded)
+        if (!errorNotifiedRef.current) {
+          errorNotifiedRef.current = true;
+          toast("Couldn't load evolution chain", { description: "Failed to load evolution chain data" });
+        }
       }
     };
 
@@ -541,6 +549,11 @@ export function PokemonDetailModal({
       // If both variants are identical sprites and no separate stats, still show both as requested.
       setGenderVariants([maleVariant, femaleVariant]);
     } catch (e) {
+      // Add toast notification for gender variant loading errors (guarded)
+      if (!errorNotifiedRef.current) {
+        errorNotifiedRef.current = true;
+        toast("Couldn't load gender variants", { description: "Failed to load gender variants data" });
+      }
       setGvError(e instanceof Error ? e.message : "Failed to load gender variants");
       setGenderVariants(null);
     } finally {
@@ -746,6 +759,11 @@ export function PokemonDetailModal({
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Failed to load description";
         setGdError(msg);
+        // Add toast notification for gender difference description errors (guarded)
+        if (!errorNotifiedRef.current) {
+          errorNotifiedRef.current = true;
+          toast("Couldn't load gender difference info", { description: "Failed to load gender difference description" });
+        }
       } finally {
         setGdLoading(false);
       }
