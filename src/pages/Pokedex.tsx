@@ -701,21 +701,37 @@ export default function Pokedex() {
   }, [selectedFormCategory, altItems.length, altHasMoreHook, altLoadingHook, fetchMoreAlt]);
 
   // Client-side filtering for search and types; switch dataset by forms filter
-  const sourceList = selectedFormCategory === "mega" ? megaList
-                    : selectedFormCategory === "gigantamax" ? gmaxList
-                    : selectedFormCategory === "alternate" ? (altItems as unknown as Pokemon[])
-                    : masterList;
+  // Replace single filteredList with per-section filtered lists
+  const normalize = (s: string) => s.trim().toLowerCase();
+  const q = normalize(searchQuery);
 
-  const filteredList = sourceList.filter((p) => {
-    const matchesSearch =
-      !searchQuery ||
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      String(p.pokemonId).includes(searchQuery.trim());
-    const matchesTypes =
-      selectedTypes.length === 0 ||
-      p.types.some((t) => selectedTypes.includes(String(t).toLowerCase()));
-    return matchesSearch && matchesTypes;
-  });
+  const filterByQueryAndTypes = (list: Pokemon[]) => {
+    return list.filter((p) => {
+      const matchesSearch =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        String(p.pokemonId).includes(q);
+      const matchesTypes =
+        selectedTypes.length === 0 ||
+        p.types.some((t) => selectedTypes.includes(String(t).toLowerCase()));
+      return matchesSearch && matchesTypes;
+    });
+  };
+
+  const filteredMaster = filterByQueryAndTypes(masterList);
+  const filteredMega = filterByQueryAndTypes(megaList);
+  const filteredGmax = filterByQueryAndTypes(gmaxList);
+  const filteredAlt = filterByQueryAndTypes(altItems as unknown as Pokemon[]);
+
+  // Choose the base list for the main grid based on the selected form category
+  const baseFilteredList =
+    selectedFormCategory === "mega"
+      ? filteredMega
+      : selectedFormCategory === "gigantamax"
+      ? filteredGmax
+      : selectedFormCategory === "alternate"
+      ? filteredAlt
+      : filteredMaster;
 
   // Reset visible count when filters/search change
   useEffect(() => {
@@ -736,17 +752,17 @@ export default function Pokedex() {
   // Derive display items
   const displayPokemon =
     selectedFormCategory === "alternate"
-      ? filteredList
-      : filteredList.slice(0, visibleCount);
+      ? baseFilteredList
+      : baseFilteredList.slice(0, visibleCount);
 
   // Maintain hasMore based on filtered length (use hook's flag for alternate forms)
   useEffect(() => {
     if (selectedFormCategory === "alternate") {
       setHasMore(altHasMoreHook);
     } else {
-      setHasMore(visibleCount < filteredList.length);
+      setHasMore(visibleCount < baseFilteredList.length);
     }
-  }, [selectedFormCategory, visibleCount, filteredList.length, altHasMoreHook]);
+  }, [selectedFormCategory, visibleCount, baseFilteredList.length, altHasMoreHook]);
 
   // Override infinite scroll to use visibleCount / filteredList
   useEffect(() => {
@@ -768,10 +784,10 @@ export default function Pokedex() {
       if (!nearBottom) return;
 
       if (!infiniteEnabled) return;
-      if (visibleCount < filteredList.length && !isLoadingMore) {
+      if (visibleCount < baseFilteredList.length && !isLoadingMore) {
         setIsLoadingMore(true);
         setTimeout(() => {
-          setVisibleCount((c) => Math.min(c + PAGE_SIZE, filteredList.length));
+          setVisibleCount((c) => Math.min(c + PAGE_SIZE, baseFilteredList.length));
           setIsLoadingMore(false);
         }, 0);
       }
@@ -779,7 +795,7 @@ export default function Pokedex() {
 
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [infiniteEnabled, visibleCount, filteredList.length, PAGE_SIZE, isLoadingMore]);
+  }, [infiniteEnabled, visibleCount, baseFilteredList.length, PAGE_SIZE, isLoadingMore]);
 
   // Disable any automatic data backfill or auto-fetching
   const AUTO_FETCH_ENABLED = false;
@@ -1082,7 +1098,7 @@ export default function Pokedex() {
                         setIsLoadingMore(true);
                         setTimeout(() => {
                           setVisibleCount((c) =>
-                            Math.min(c + PAGE_SIZE, filteredList.length)
+                            Math.min(c + PAGE_SIZE, baseFilteredList.length)
                           );
                           setIsLoadingMore(false);
                           setInfiniteEnabled(true); // enable infinite after first manual load
@@ -1112,7 +1128,7 @@ export default function Pokedex() {
                   <h3 className="text-xl font-semibold tracking-tight">Gigantamax Forms</h3>
                 </div>
                 <PokemonGrid
-                  pokemon={gmaxList as unknown as Pokemon[]}
+                  pokemon={filteredGmax as unknown as Pokemon[]}
                   favorites={[]}
                   onFavoriteToggle={handleFavoriteToggle}
                   isLoading={gmaxLoading}
@@ -1125,7 +1141,7 @@ export default function Pokedex() {
                   <h3 className="text-xl font-semibold tracking-tight">Mega Evolutions</h3>
                 </div>
                 <PokemonGrid
-                  pokemon={megaList}
+                  pokemon={filteredMega}
                   favorites={[]}
                   onFavoriteToggle={handleFavoriteToggle}
                   isLoading={megaLoading}
@@ -1138,7 +1154,7 @@ export default function Pokedex() {
                   <h3 className="text-xl font-semibold tracking-tight">Alternate Forms</h3>
                 </div>
                 <PokemonGrid
-                  pokemon={(altItems as unknown as Pokemon[])}
+                  pokemon={filteredAlt as unknown as Pokemon[]}
                   favorites={[]}
                   onFavoriteToggle={handleFavoriteToggle}
                   isLoading={altLoadingHook}
