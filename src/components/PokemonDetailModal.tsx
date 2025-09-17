@@ -237,17 +237,6 @@ export function PokemonDetailModal({
         setLoadingEnhanced(true);
         const nameOrId = String(pokemon.name || pokemon.pokemonId);
 
-        // Kick off species fetch immediately by ID (fast + always valid)
-        const speciesPromise = (async () => {
-          if (pid > 0 && speciesByIdCache.has(pid)) return speciesByIdCache.get(pid);
-          const s = await fetchJson(`${API}/pokemon-species/${pid}`).catch(async () => {
-            // fallback to name if id path fails (rare)
-            return await fetchJson(`${API}/pokemon-species/${nameOrId}`);
-          });
-          if (pid > 0) speciesByIdCache.set(pid, s);
-          return s;
-        })();
-
         // Detail fetch with quick cache by ID first
         const detailPromise = (async () => {
           if (pid > 0 && pokemonDetailByIdCache.has(pid)) return pokemonDetailByIdCache.get(pid);
@@ -258,7 +247,29 @@ export function PokemonDetailModal({
           return detail;
         })();
 
-        // Resolve both in parallel
+        // Species fetch should be derived from detail.species.url to avoid 404s for forms/gmax/mega
+        const speciesPromise = (async () => {
+          try {
+            const detail = await detailPromise;
+            const speciesUrl: string | undefined = detail?.species?.url;
+            if (speciesUrl) {
+              const s = await fetchJson(speciesUrl);
+              if (pid > 0) speciesByIdCache.set(pid, s);
+              return s;
+            }
+          } catch {
+            // fall through to fallback path below
+          }
+          // Fallback: previous behavior if detail/species url not available for some reason
+          if (pid > 0 && speciesByIdCache.has(pid)) return speciesByIdCache.get(pid);
+          const s = await fetchJson(`${API}/pokemon-species/${pid}`).catch(async () => {
+            return await fetchJson(`${API}/pokemon-species/${nameOrId}`);
+          });
+          if (pid > 0) speciesByIdCache.set(pid, s);
+          return s;
+        })();
+
+        // Resolve both in parallel (speciesPromise internally depends on detailPromise safely)
         const [detail, species] = await Promise.all([detailPromise, speciesPromise]);
 
         if (!mounted) return;
