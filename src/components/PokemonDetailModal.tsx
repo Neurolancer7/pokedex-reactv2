@@ -565,7 +565,18 @@ export function PokemonDetailModal({
     !(Array.isArray(pokemon.abilities) && pokemon.abilities.length > 0) ||
     !(pokemon.sprites?.officialArtwork) ||
     !(pokemon.species?.flavorText);
-  const isLoading = loadingEnhanced || (!enhanced && needsDetailsLocal);
+
+  // New: detect if enhanced data is still missing key expanded details
+  const isStillSparseAfterEnhance =
+    !!enhanced &&
+    (
+      !(Array.isArray(enhanced.stats) && enhanced.stats.length > 0) ||
+      !(Array.isArray(enhanced.abilities) && enhanced.abilities.length > 0) ||
+      !(enhanced.sprites?.officialArtwork) ||
+      !(enhanced.species?.flavorText)
+    );
+
+  const isLoading = loadingEnhanced || (!enhanced && needsDetailsLocal) || isStillSparseAfterEnhance;
 
   const isGmax = (() => {
     const n = String(data?.name ?? "").toLowerCase();
