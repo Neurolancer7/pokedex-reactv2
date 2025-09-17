@@ -129,7 +129,7 @@ export function useAlternateForms() {
   const API_BASE: string =
     ((import.meta as any)?.env?.VITE_POKEAPI_URL as string) || "https://pokeapi.co/api/v2";
   const PAGE_SIZE: number =
-    Number(((import.meta as any)?.env?.VITE_DEFAULT_PAGE_SIZE as string) || 40) || 40;
+    Number(((import.meta as any)?.env?.VITE_DEFAULT_PAGE_SIZE as string) || 0) || 60;
 
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
   const [items, setItems] = useState<Built[]>([]);
@@ -194,14 +194,13 @@ export function useAlternateForms() {
       const end = Math.min(queue.length, cursor + PAGE_SIZE);
       const slice = queue.slice(start, end);
 
-      // Throttled parallelism - increase concurrency modestly
-      const CONCURRENCY = 24; // increased from 16; still safe and faster due to single fetch per item now
+      // Throttled parallelism - modestly increased for better throughput
+      const CONCURRENCY = 32;
       const out: Built[] = [];
       for (let i = 0; i < slice.length; i += CONCURRENCY) {
         const batch = slice.slice(i, i + CONCURRENCY);
         const results = await Promise.all(
           batch.map(async (q) => {
-            // small stagger to avoid burst
             await sleep(8);
             return await buildPokemonFromForm(API_BASE, q.formName);
           })
@@ -219,7 +218,6 @@ export function useAlternateForms() {
         deduped.push(p);
       }
 
-      // Keep stable: sort by pokemonId asc then name asc
       deduped.sort((a, b) => a.pokemonId - b.pokemonId || a.name.localeCompare(b.name));
 
       setItems(deduped);

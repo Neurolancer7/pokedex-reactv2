@@ -290,6 +290,8 @@ export default function Pokedex() {
   const fetchedFormCategoryRef = useRef<Set<string>>(new Set());
   // Add: small cooldown for alternate infinite scroll to prevent bursts
   const altScrollCooldownRef = useRef(0);
+  // Add: IntersectionObserver sentinel for alternate forms infinite scroll
+  const altSentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Gigantamax list state (client-side, uses lib/gigantamax.ts)
   const [gmaxList, setGmaxList] = useState<Pokemon[]>([]);
@@ -1154,6 +1156,10 @@ export default function Pokedex() {
                 selectedFormCategory === "alternate" ? altHasMoreHook : hasMore
               ) && (
                 <>
+                  {/* Sentinel for IntersectionObserver (alternate forms only) */}
+                  {selectedFormCategory === "alternate" && (
+                    <div ref={altSentinelRef} aria-hidden="true" className="h-1 w-full" />
+                  )}
                   {(
                     selectedFormCategory === "alternate" ? altLoadingHook : isLoadingMore
                   ) ? (
@@ -1197,9 +1203,9 @@ export default function Pokedex() {
                       }
                       aria-busy={selectedFormCategory === "alternate" ? altLoadingHook : isLoadingMore}
                       aria-live="polite"
-                      aria-label="Load more Pokémon"
+                      aria-label={selectedFormCategory === "alternate" ? "Load more alternate forms" : "Load more Pokémon"}
                     >
-                      Load More
+                      {selectedFormCategory === "alternate" ? "Load More Forms" : "Load More"}
                     </Button>
                   )}
                 </>
