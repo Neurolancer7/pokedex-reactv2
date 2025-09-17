@@ -70,6 +70,8 @@ export function PokemonDetailModal({
   if (!pokemon) return null;
 
   const [enhanced, setEnhanced] = useState<Pokemon | null>(null);
+  // Add: explicit loading flag for enhanced fetch
+  const [loadingEnhanced, setLoadingEnhanced] = useState(false);
   const [showShiny, setShowShiny] = useState(false);
   const [evolutionPreview, setEvolutionPreview] = useState<Array<{ name: string; sprite?: string; id?: number }>>([]);
   const [baseFormPreview, setBaseFormPreview] = useState<{ name: string; sprite?: string; id?: number } | null>(null);
@@ -99,6 +101,8 @@ export function PokemonDetailModal({
     if (pid > 0 && enhancedCache.has(pid)) {
       // Instant hydrate from cache
       setEnhanced(enhancedCache.get(pid)!);
+      // Ensure loading state resets on cache hit
+      setLoadingEnhanced(false);
       return () => {
         mounted = false;
       };
@@ -115,6 +119,8 @@ export function PokemonDetailModal({
     if (!needsDetails) {
       // Cache lightweight base for next open to avoid refetch
       if (pid > 0 && !enhancedCache.has(pid)) enhancedCache.set(pid, pokemon);
+      // Ensure loading is not shown when details aren't needed
+      setLoadingEnhanced(false);
       return () => {
         mounted = false;
       };
@@ -228,6 +234,7 @@ export function PokemonDetailModal({
 
     (async () => {
       try {
+        setLoadingEnhanced(true);
         const nameOrId = String(pokemon.name || pokemon.pokemonId);
 
         // Kick off species fetch immediately by ID (fast + always valid)
@@ -263,11 +270,15 @@ export function PokemonDetailModal({
         if (!mounted) return;
         if (pid > 0 && !enhancedCache.has(pid)) enhancedCache.set(pid, pokemon);
         setEnhanced(pokemon);
+      } finally {
+        if (mounted) setLoadingEnhanced(false);
       }
     })();
 
     return () => {
       mounted = false;
+      // Ensure we don't leave the spinner on if unmounted mid-fetch
+      setLoadingEnhanced(false);
     };
   }, [pokemon]);
 
@@ -554,7 +565,7 @@ export function PokemonDetailModal({
     !(Array.isArray(pokemon.abilities) && pokemon.abilities.length > 0) ||
     !(pokemon.sprites?.officialArtwork) ||
     !(pokemon.species?.flavorText);
-  const isLoading = !enhanced && needsDetailsLocal;
+  const isLoading = loadingEnhanced || (!enhanced && needsDetailsLocal);
 
   const isGmax = (() => {
     const n = String(data?.name ?? "").toLowerCase();
