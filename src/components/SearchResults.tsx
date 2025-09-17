@@ -31,8 +31,42 @@ export default function SearchResults({
   const hasMore =
     layoutVariant === "alternate" ? false : visible < (pokemon?.length || 0);
 
+  // Add: computed counts for summary (accessible live region)
+  const totalCount = pokemon?.length ?? 0;
+  const showingCount =
+    layoutVariant === "alternate" ? totalCount : Math.min(visible, totalCount);
+
   return (
     <div className="flex flex-col gap-4">
+      {/* Results summary bar */}
+      <div
+        className="flex items-center justify-between rounded-lg border bg-card/70 px-3 py-2 text-sm"
+        aria-live="polite"
+      >
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-6 items-center rounded-full border px-2.5 font-medium">
+            Results
+          </span>
+          <span className="text-muted-foreground">
+            Showing <span className="font-semibold text-foreground">{showingCount}</span>
+            {layoutVariant !== "alternate" && (
+              <>
+                {" "}
+                of <span className="font-semibold text-foreground">{totalCount}</span>
+              </>
+            )}
+          </span>
+        </div>
+
+        {!isLoading && totalCount === 0 ? (
+          <span className="text-muted-foreground">No matches</span>
+        ) : (
+          <span className="text-muted-foreground">
+            {layoutVariant === "alternate" ? "Alternate forms view" : "Standard view"}
+          </span>
+        )}
+      </div>
+
       <PokemonGrid
         pokemon={sliced as Pokemon[]}
         favorites={favorites}
