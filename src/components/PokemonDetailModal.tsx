@@ -714,7 +714,7 @@ export function PokemonDetailModal({
         aria-describedby="pokemon-dialog-description"
       >
         <ScrollArea className="max-h-[90vh]">
-          <div className="p-4 sm:p-6">
+          <div className="p-4 sm:p-6 pb-24 sm:pb-6">
             {/* Header */}
             <DialogHeader className="flex flex-row items-center justify-between space-y-0 mb-6">
               <div className="flex items-center gap-3">
@@ -748,7 +748,7 @@ export function PokemonDetailModal({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8"
+                      className="h-9 w-9 sm:h-8 sm:w-8"
                       onClick={() => onNavigate("prev")}
                       disabled={!hasPrev}
                       aria-label="Previous Pokémon"
@@ -758,7 +758,7 @@ export function PokemonDetailModal({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8"
+                      className="h-9 w-9 sm:h-8 sm:w-8"
                       onClick={() => onNavigate("next")}
                       disabled={!hasNext}
                       aria-label="Next Pokémon"
@@ -772,6 +772,7 @@ export function PokemonDetailModal({
                     variant="ghost"
                     size="sm"
                     onClick={handleFavoriteClick}
+                    className="h-9 w-9 sm:h-8 sm:w-8"
                   >
                     <Heart 
                       className={`h-5 w-5 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-muted-foreground'}`} 
@@ -782,7 +783,7 @@ export function PokemonDetailModal({
             </DialogHeader>
 
             {/* Main Content */}
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-2 gap-5 sm:gap-6">
               {/* Left Column */}
               <div className="space-y-4">
                 {/* Pokemon Image with Shiny toggle */}
@@ -873,7 +874,7 @@ export function PokemonDetailModal({
                             size="sm"
                             onClick={() => setShowShiny((s) => !s)}
                             aria-pressed={showShiny}
-                            className={`${baseClass} ${shinyClass}`}
+                            className={`${baseClass} ${shinyClass} h-9 sm:h-8 px-3`}
                           >
                             <Sparkles
                               className={`h-4 w-4 mr-1 ${showShiny ? (isGmax ? "text-purple-500" : isMega ? "text-fuchsia-500" : isAlternateForm ? "text-sky-500" : "text-foreground") : "text-muted-foreground"}`}
@@ -1144,12 +1145,12 @@ export function PokemonDetailModal({
 
                 {/* Height & Weight moved here, right-aligned */}
                 <div className="h-w-icons mt-3">
-                  <div className="flex items-center justify-start gap-4">
-                    <div className="text-left p-3 bg-muted/50 rounded-lg min-w-[120px]">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-start gap-3 sm:gap-4">
+                    <div className="text-left p-3 bg-muted/50 rounded-lg w-full sm:min-w-[120px]">
                       <div className="flex items-center justify-start gap-2.5 mb-1 text-muted-foreground">
                         {/* Styled icon chip using primary type color */}
                         <span
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm shrink-0"
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
                           style={{
                             backgroundColor: primaryTypeColor + "15",
                             borderColor: primaryTypeColor + "40",
@@ -1165,11 +1166,11 @@ export function PokemonDetailModal({
                       </div>
                       <div className="font-semibold">{heightM}m</div>
                     </div>
-                    <div className="text-left p-3 bg-muted/50 rounded-lg min-w-[120px]">
+                    <div className="text-left p-3 bg-muted/50 rounded-lg w-full sm:min-w-[120px]">
                       <div className="flex items-center justify-start gap-2.5 mb-1 text-muted-foreground">
                         {/* Styled icon chip using primary type color */}
                         <span
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm shrink-0"
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
                           style={{
                             backgroundColor: primaryTypeColor + "15",
                             borderColor: primaryTypeColor + "40",
