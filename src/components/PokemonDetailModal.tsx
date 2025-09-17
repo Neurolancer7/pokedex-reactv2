@@ -1138,9 +1138,9 @@ export function PokemonDetailModal({
 
                 {/* Height & Weight moved here, right-aligned */}
                 <div className="h-w-icons mt-3">
-                  <div className="flex items-center justify-end gap-4">
-                    <div className="text-right p-3 bg-muted/50 rounded-lg min-w-[120px]">
-                      <div className="flex items-center justify-end gap-2.5 mb-1 text-muted-foreground">
+                  <div className="flex items-center justify-start gap-4">
+                    <div className="text-left p-3 bg-muted/50 rounded-lg min-w-[120px]">
+                      <div className="flex items-center justify-start gap-2.5 mb-1 text-muted-foreground">
                         {/* Styled icon chip using primary type color */}
                         <span
                           className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm shrink-0"
@@ -1159,8 +1159,8 @@ export function PokemonDetailModal({
                       </div>
                       <div className="font-semibold">{heightM}m</div>
                     </div>
-                    <div className="text-right p-3 bg-muted/50 rounded-lg min-w-[120px]">
-                      <div className="flex items-center justify-end gap-2.5 mb-1 text-muted-foreground">
+                    <div className="text-left p-3 bg-muted/50 rounded-lg min-w-[120px]">
+                      <div className="flex items-center justify-start gap-2.5 mb-1 text-muted-foreground">
                         {/* Styled icon chip using primary type color */}
                         <span
                           className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm shrink-0"
