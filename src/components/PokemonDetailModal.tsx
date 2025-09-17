@@ -898,20 +898,6 @@ export function PokemonDetailModal({
                   </div>
                 )}
 
-                {/* Physical Stats */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <Ruler className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-                    <div className="text-sm text-muted-foreground">Height</div>
-                    <div className="font-semibold">{heightM}m</div>
-                  </div>
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <Weight className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-                    <div className="text-sm text-muted-foreground">Weight</div>
-                    <div className="font-semibold">{weightKg}kg</div>
-                  </div>
-                </div>
-
                 {/* Description */}
                 {(data?.species?.flavorText) && (
                   <div className="p-4 bg-muted/30 rounded-lg">
@@ -1138,6 +1124,26 @@ export function PokemonDetailModal({
                         )}
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                {/* Height & Weight moved here, right-aligned */}
+                <div className="h-w-icons mt-3">
+                  <div className="flex items-stretch justify-end gap-3">
+                    <div className="text-right p-3 bg-muted/50 rounded-lg min-w-[120px]">
+                      <div className="flex items-center justify-end gap-2 mb-1 text-muted-foreground">
+                        <Ruler className="h-4 w-4" />
+                        <span className="text-sm">Height</span>
+                      </div>
+                      <div className="font-semibold">{heightM}m</div>
+                    </div>
+                    <div className="text-right p-3 bg-muted/50 rounded-lg min-w-[120px]">
+                      <div className="flex items-center justify-end gap-2 mb-1 text-muted-foreground">
+                        <Weight className="h-4 w-4" />
+                        <span className="text-sm">Weight</span>
+                      </div>
+                      <div className="font-semibold">{weightKg}kg</div>
+                    </div>
                   </div>
                 </div>
 
