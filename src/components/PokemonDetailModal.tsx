@@ -784,9 +784,9 @@ export function PokemonDetailModal({
                   <div
                     className={`w-full aspect-square rounded-lg flex items-center justify-center
                       ${isGmax
-                        ? "bg-gradient-to-br from-purple-600/15 via-fuchsia-500/10 to-purple-700/15 ring-2 ring-purple-500/30 shadow-lg shadow-purple-500/20"
+                        ? "bg-gradient-to-br from-purple-600/25 via-fuchsia-500/20 to-purple-700/25 ring-2 ring-purple-500/40 shadow-lg shadow-purple-500/30"
                         : isMega
-                          ? "bg-gradient-to-br from-fuchsia-600/15 via-pink-500/10 to-fuchsia-700/15 ring-2 ring-fuchsia-500/30 shadow-lg shadow-fuchsia-500/20"
+                          ? "bg-gradient-to-br from-fuchsia-600/25 via-pink-500/20 to-fuchsia-700/25 ring-2 ring-fuchsia-500/40 shadow-lg shadow-fuchsia-500/30"
                           : "bg-gradient-to-br from-muted/50 to-muted border-2"}
                     `}
                     // Themed ring and shadow for non Mega/G-Max
@@ -1187,9 +1187,9 @@ export function PokemonDetailModal({
                   <div
                     className={`p-4 rounded-lg border ${
                       isGmax
-                        ? "bg-gradient-to-br from-purple-600/10 via-fuchsia-500/5 to-purple-700/10 border-purple-500/30"
+                        ? "bg-gradient-to-br from-purple-600/20 via-fuchsia-500/10 to-purple-700/20 border-purple-500/40"
                         : isMega
-                        ? "bg-gradient-to-br from-fuchsia-600/10 via-pink-500/5 to-fuchsia-700/10 border-fuchsia-500/30"
+                        ? "bg-gradient-to-br from-fuchsia-600/20 via-pink-500/10 to-fuchsia-700/20 border-fuchsia-500/40"
                         : "bg-muted/30"
                     }`}
                   >
@@ -1256,7 +1256,7 @@ export function PokemonDetailModal({
 
                 {/* Gender Differences Panel */}
                 {genderPanelOpen && (
-                  <div className="mt-3 p-3 rounded-lg border bg-gradient-to-br from-pink-500/5 to-purple-500/5">
+                  <div className="mt-3 p-3 rounded-lg border bg-gradient-to-br from-pink-500/15 to-purple-500/15">
                     {gvLoading && (
                       <div className="w-full flex items-center justify-center py-3" aria-busy="true" aria-live="polite">
                         <div className="px-4 h-10 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow border border-white/10 flex items-center justify-center animate-pulse">
