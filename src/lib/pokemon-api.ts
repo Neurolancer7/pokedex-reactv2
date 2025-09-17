@@ -259,3 +259,13 @@ export async function fetchPokemonWithFallback(baseName: string): Promise<{ ok: 
   pendingPokemonRequests.set(candidate, p);
   return p;
 }
+
+export function formatHeight(heightDm?: number): string {
+  if (typeof heightDm !== "number" || !Number.isFinite(heightDm) || heightDm <= 0) return "–";
+  return (heightDm / 10).toFixed(1);
+}
+
+export function formatWeight(weightHg?: number): string {
+  if (typeof weightHg !== "number" || !Number.isFinite(weightHg) || weightHg <= 0) return "–";
+  return (weightHg / 10).toFixed(1);
+}
