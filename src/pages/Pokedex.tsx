@@ -189,6 +189,32 @@ async function buildPokemonFromFormName(fetcher: <T>(u: string) => Promise<T>, f
   return p;
 }
 
+// Helper: enrich a list with per-Pokémon types (batched to be gentle on rate limits)
+const enrichListWithTypes = async (list: Pokemon[]): Promise<Pokemon[]> => {
+  const out: Pokemon[] = [];
+  const batchSize = 10;
+  for (let i = 0; i < list.length; i += batchSize) {
+    const batch = list.slice(i, i + batchSize);
+    const enriched = await Promise.all(
+      batch.map(async (p) => {
+        try {
+          const json = await fetchJsonWithRetry<any>(`https://pokeapi.co/api/v2/pokemon/${p.pokemonId}`);
+          const types: string[] = Array.isArray(json?.types)
+            ? json.types
+                .map((t: any) => String(t?.type?.name ?? "").toLowerCase())
+                .filter(Boolean)
+            : [];
+          return { ...p, types };
+        } catch {
+          return p; // fallback to minimal if fetch fails
+        }
+      })
+    );
+    out.push(...enriched);
+  }
+  return out;
+};
+
 export default function Pokedex() {
   const { isAuthenticated } = useAuth();
   // Disable all data I/O across the page
@@ -386,9 +412,12 @@ export default function Pokedex() {
         (p) => p.pokemonId >= bounds.min && p.pokemonId <= bounds.max
       );
 
-      setMasterList(bounded);
+      // NEW: enrich with real types so Type filters work with Region
+      const enriched = await enrichListWithTypes(bounded);
+
+      setMasterList(enriched);
       setVisibleCount(PAGE_SIZE);
-      setHasMore(PAGE_SIZE < bounded.length);
+      setHasMore(PAGE_SIZE < enriched.length);
       toast.success(`Loaded ${region.label} Pokédex`);
     } catch (error) {
       console.error("Error loading region:", error);
@@ -717,14 +746,16 @@ export default function Pokedex() {
   const q = normalize(searchQuery);
 
   const filterByQueryAndTypes = (list: Pokemon[]) => {
+    const selectedTypesLower = selectedTypes.map((t) => String(t).toLowerCase());
     return list.filter((p) => {
       const matchesSearch =
         !q ||
         p.name.toLowerCase().includes(q) ||
         String(p.pokemonId).includes(q);
       const matchesTypes =
-        selectedTypes.length === 0 ||
-        p.types.some((t) => selectedTypes.includes(String(t).toLowerCase()));
+        selectedTypesLower.length === 0 ||
+        (Array.isArray(p.types) &&
+          p.types.some((t) => selectedTypesLower.includes(String(t).toLowerCase())));
       return matchesSearch && matchesTypes;
     });
   };
