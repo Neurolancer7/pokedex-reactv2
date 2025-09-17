@@ -710,6 +710,8 @@ export function PokemonDetailModal({
         className={`w-[95vw] sm:max-w-3xl max-h-[90vh] p-0 rounded-lg sm:rounded-xl border-2 ${isMega ? "ring-2 ring-fuchsia-500/30 shadow-lg shadow-fuchsia-500/20" : ""}`}
         // Add subtle themed border/glow using primary type color (only adds when not Mega)
         style={!isMega ? { borderColor: primaryTypeColor + "33", boxShadow: `0 10px 30px ${primaryTypeColor}22` } : undefined}
+        // Accessibility: make sure DialogContent has a descriptive target
+        aria-describedby="pokemon-dialog-description"
       >
         <ScrollArea className="max-h-[90vh]">
           <div className="p-4 sm:p-6">
@@ -736,6 +738,10 @@ export function PokemonDetailModal({
                   )}
                 </DialogTitle>
               </div>
+              {/* Add an accessible description for the dialog; visually hidden but available to screen readers */}
+              <DialogDescription id="pokemon-dialog-description" className="sr-only">
+                Detailed Pokémon information including types, stats, abilities, description, evolution chain, and size data.
+              </DialogDescription>
               <div className="flex items-center gap-2">
                 {typeof onNavigate === "function" && (
                   <>
