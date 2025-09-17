@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatPokemonId, formatPokemonName, getTypeColor } from "@/lib/pokemon-api";
 import type { Pokemon } from "@/lib/pokemon-api";
+import { useRef, useCallback } from "react";
 
 interface PokemonCardProps {
   pokemon: Pokemon;
@@ -78,11 +79,50 @@ export function PokemonCard({
     return MOVES[base];
   })();
 
+  // Prefetch details on hover/focus to warm HTTP cache for faster modal open
+  const hasPrefetchedRef = useRef(false);
+  const prefetchDetails = useCallback(() => {
+    if (hasPrefetchedRef.current) return;
+    hasPrefetchedRef.current = true;
+
+    const API = (import.meta as any)?.env?.VITE_POKEAPI_URL || "https://pokeapi.co/api/v2";
+    const name = String(pokemon.name).toLowerCase();
+    const id = Number(pokemon.pokemonId);
+
+    const withTimeout = async (url: string, timeoutMs = 8000) => {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal, cache: "default" });
+        // Best-effort: reading JSON helps populate cache layers; ignore errors
+        if (res.ok) {
+          // Avoid throwing here; silently parse to hydrate cache
+          await res.json().catch(() => {});
+        }
+      } catch {
+        // ignore prefetch errors
+      } finally {
+        clearTimeout(t);
+      }
+    };
+
+    // Fetch both endpoints in parallel; try name first for /pokemon, id for /pokemon-species
+    // This mirrors the modal logic and maximizes cache hits
+    void Promise.allSettled([
+      withTimeout(`${API}/pokemon/${name}`),
+      withTimeout(`${API}/pokemon/${id}`).catch(() => {}), // some forms resolve by id as backup
+      withTimeout(`${API}/pokemon-species/${id}`),
+      withTimeout(`${API}/pokemon-species/${name}`).catch(() => {}),
+    ]);
+  }, [pokemon.name, pokemon.pokemonId]);
+
   return (
     <motion.div
       whileHover={{ y: -4, scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      onMouseEnter={prefetchDetails}
+      onFocus={prefetchDetails}
     >
       <Card 
         className="cursor-pointer overflow-hidden border-2 hover:border-primary/50 transition-colors group"
