@@ -685,6 +685,14 @@ export function PokemonDetailModal({
     return found ? found.name : undefined;
   })();
 
+  // Add: lightweight loading flag for Evolution Chain preview to show section-level skeletons
+  const evoLoading = (() => {
+    const evoId = (enhanced?.species?.evolutionChainId ?? null) as number | null;
+    if (!evoId) return false;
+    // If we have an evoId, and no items in local state, and the cache doesn't have it yet, treat as loading
+    return evolutionPreview.length === 0 && !evolutionChainCache.has(evoId);
+  })();
+
   const normalizeForWhitelist = (nm: string): string => {
     const lower = nm.toLowerCase();
     if (lower.endsWith("-mega-x")) return lower.slice(0, -7);
@@ -1207,7 +1215,7 @@ export function PokemonDetailModal({
                   </div>
 
                   {/* Evolution Chain Preview */}
-                  {evolutionPreview.length > 0 && (
+                  {evolutionPreview.length > 0 ? (
                     <div>
                       <h4 className="font-semibold mb-3">Evolution Chain</h4>
                       <div className="flex items-center gap-3 overflow-x-auto pb-2">
@@ -1237,10 +1245,30 @@ export function PokemonDetailModal({
                         ))}
                       </div>
                     </div>
+                  ) : (
+                    // Add: section-level skeleton for Evolution Chain when loading
+                    evoLoading && (
+                      <div>
+                        <h4 className="font-semibold mb-3">Evolution Chain</h4>
+                        <div className="flex items-center gap-3 overflow-x-auto pb-2">
+                          {Array.from({ length: 3 }).map((_, i) => (
+                            <div key={i} className="flex items-center gap-3">
+                              <div className="flex flex-col items-center">
+                                <div className="w-16 h-16 rounded-full bg-muted/50 border flex items-center justify-center">
+                                  <Skeleton className="w-12 h-12 rounded-full" />
+                                </div>
+                                <Skeleton className="mt-1 h-3 w-14 rounded" />
+                              </div>
+                              {i < 2 && <Skeleton className="h-4 w-4 rounded" />}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
                   )}
 
                   {/* Base Form (for Mega evolutions) */}
-                  {isMega && baseFormPreview && (
+                  {isMega && baseFormPreview ? (
                     <div>
                       <h4 className="font-semibold mb-3">Base Form</h4>
                       <div className="flex items-center gap-3">
@@ -1268,6 +1296,22 @@ export function PokemonDetailModal({
                         </div>
                       </div>
                     </div>
+                  ) : (
+                    // Add: section-level skeleton for Base Form while it loads for Mega evolutions
+                    isMega && !baseFormPreview && (
+                      <div>
+                        <h4 className="font-semibold mb-3">Base Form</h4>
+                        <div className="flex items-center gap-3">
+                          <div className="w-16 h-16 rounded-full bg-muted/50 border flex items-center justify-center">
+                            <Skeleton className="w-12 h-12 rounded-full" />
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <Skeleton className="h-4 w-28" />
+                            <Skeleton className="h-3 w-16" />
+                          </div>
+                        </div>
+                      </div>
+                    )
                   )}
 
                   {/* Top Moves (preview) */}
