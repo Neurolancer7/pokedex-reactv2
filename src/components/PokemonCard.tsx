@@ -78,6 +78,9 @@ export function PokemonCard({
     return MOVES[base];
   })();
 
+  const heightM = Number.isFinite(pokemon.height) && pokemon.height > 0 ? (pokemon.height / 10).toFixed(1) : "–";
+  const weightKg = Number.isFinite(pokemon.weight) && pokemon.weight > 0 ? (pokemon.weight / 10).toFixed(1) : "–";
+
   return (
     <motion.div
       whileHover={{ y: -4, scale: 1.02 }}
@@ -193,11 +196,11 @@ export function PokemonCard({
             <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
               <div className="text-center">
                 <div className="font-medium">Height</div>
-                <div>{(pokemon.height / 10).toFixed(1)}m</div>
+                <div>{heightM}m</div>
               </div>
               <div className="text-center">
                 <div className="font-medium">Weight</div>
-                <div>{(pokemon.weight / 10).toFixed(1)}kg</div>
+                <div>{weightKg}kg</div>
               </div>
             </div>
           </div>
