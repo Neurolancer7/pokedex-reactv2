@@ -1129,12 +1129,12 @@ export function PokemonDetailModal({
 
                 {/* Height & Weight moved here, right-aligned */}
                 <div className="h-w-icons mt-3">
-                  <div className="flex items-stretch justify-end gap-3">
+                  <div className="flex items-center justify-end gap-4">
                     <div className="text-right p-3 bg-muted/50 rounded-lg min-w-[120px]">
-                      <div className="flex items-center justify-end gap-2 mb-1 text-muted-foreground">
+                      <div className="flex items-center justify-end gap-2.5 mb-1 text-muted-foreground">
                         {/* Styled icon chip using primary type color */}
                         <span
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm"
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm shrink-0"
                           style={{
                             backgroundColor: primaryTypeColor + "15",
                             borderColor: primaryTypeColor + "40",
@@ -1146,15 +1146,15 @@ export function PokemonDetailModal({
                             style={{ color: primaryTypeColor }}
                           />
                         </span>
-                        <span className="text-sm">Height</span>
+                        <span className="text-sm whitespace-nowrap leading-none">Height</span>
                       </div>
                       <div className="font-semibold">{heightM}m</div>
                     </div>
                     <div className="text-right p-3 bg-muted/50 rounded-lg min-w-[120px]">
-                      <div className="flex items-center justify-end gap-2 mb-1 text-muted-foreground">
+                      <div className="flex items-center justify-end gap-2.5 mb-1 text-muted-foreground">
                         {/* Styled icon chip using primary type color */}
                         <span
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm"
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm shrink-0"
                           style={{
                             backgroundColor: primaryTypeColor + "15",
                             borderColor: primaryTypeColor + "40",
@@ -1166,7 +1166,7 @@ export function PokemonDetailModal({
                             style={{ color: primaryTypeColor }}
                           />
                         </span>
-                        <span className="text-sm">Weight</span>
+                        <span className="text-sm whitespace-nowrap leading-none">Weight</span>
                       </div>
                       <div className="font-semibold">{weightKg}kg</div>
                     </div>
@@ -1322,7 +1322,7 @@ export function PokemonDetailModal({
                                     <div className="text-center p-2 bg-muted/50 rounded-lg">
                                       {/* Softer icon chip for variant cards */}
                                       <span
-                                        className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1"
+                                        className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
                                         style={{
                                           backgroundColor: primaryTypeColor + "10",
                                           borderColor: primaryTypeColor + "30",
@@ -1334,7 +1334,7 @@ export function PokemonDetailModal({
                                           style={{ color: primaryTypeColor }}
                                         />
                                       </span>
-                                      <div className="text-xs text-muted-foreground">Height</div>
+                                      <div className="text-xs text-muted-foreground leading-none">Height</div>
                                       <div className="font-semibold">
                                         {typeof v.height === "number" ? (v.height / 10).toFixed(1) : "–"}m
                                       </div>
@@ -1342,7 +1342,7 @@ export function PokemonDetailModal({
                                     <div className="text-center p-2 bg-muted/50 rounded-lg">
                                       {/* Softer icon chip for variant cards */}
                                       <span
-                                        className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1"
+                                        className="inline-flex items-center justify-center h-6 w-6 rounded-full border shadow-sm mx-auto mb-1.5 shrink-0"
                                         style={{
                                           backgroundColor: primaryTypeColor + "10",
                                           borderColor: primaryTypeColor + "30",
@@ -1354,7 +1354,7 @@ export function PokemonDetailModal({
                                           style={{ color: primaryTypeColor }}
                                         />
                                       </span>
-                                      <div className="text-xs text-muted-foreground">Weight</div>
+                                      <div className="text-xs text-muted-foreground leading-none">Weight</div>
                                       <div className="font-semibold">
                                         {typeof v.weight === "number" ? (v.weight / 10).toFixed(1) : "–"}kg
                                       </div>
