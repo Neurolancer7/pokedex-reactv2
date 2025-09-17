@@ -198,7 +198,12 @@ const SPECIAL_SLUG_MAP: Record<string, string> = {
  */
 export async function fetchPokemonWithFallback(baseName: string): Promise<{ ok: true; data: any } | { ok: false; status?: number; message?: string }> {
   const base = normalizePokemonName(baseName);
-  const candidate = SPECIAL_SLUG_MAP[base] || base;
+
+  // Force Unown letter variants to use the base endpoint to avoid 404s
+  let candidate = SPECIAL_SLUG_MAP[base] || base;
+  if (candidate.startsWith("unown") && candidate !== "unown") {
+    candidate = "unown";
+  }
 
   if (resolvedSlugCache.has(candidate)) {
     const slug = resolvedSlugCache.get(candidate)!;
@@ -231,7 +236,8 @@ export async function fetchPokemonWithFallback(baseName: string): Promise<{ ok: 
       }
 
       // Fallback via species varieties
-      const speciesRes = await retryFetch(`https://pokeapi.co/api/v2/pokemon-species/${base}`, undefined, 2, 300);
+      const speciesKey = candidate; // for Unown variants, this is "unown"
+      const speciesRes = await retryFetch(`https://pokeapi.co/api/v2/pokemon-species/${speciesKey}`, undefined, 2, 300);
       if (!speciesRes.ok) {
         return { ok: false, status: speciesRes.status, message: `Species HTTP ${speciesRes.status}` } as const;
       }

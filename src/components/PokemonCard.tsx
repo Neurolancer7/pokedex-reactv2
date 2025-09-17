@@ -89,14 +89,15 @@ export function PokemonCard({
     const name = String(pokemon.name).toLowerCase();
     const id = Number(pokemon.pokemonId);
 
+    // Avoid invalid Unown variant endpoints; prefetch base to warm cache correctly
+    const fetchName = name.startsWith("unown") && name !== "unown" ? "unown" : name;
+
     const withTimeout = async (url: string, timeoutMs = 8000) => {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), timeoutMs);
       try {
         const res = await fetch(url, { signal: ctrl.signal, cache: "default" });
-        // Best-effort: reading JSON helps populate cache layers; ignore errors
         if (res.ok) {
-          // Avoid throwing here; silently parse to hydrate cache
           await res.json().catch(() => {});
         }
       } catch {
@@ -106,13 +107,11 @@ export function PokemonCard({
       }
     };
 
-    // Fetch both endpoints in parallel; try name first for /pokemon, id for /pokemon-species
-    // This mirrors the modal logic and maximizes cache hits
     void Promise.allSettled([
-      withTimeout(`${API}/pokemon/${name}`),
-      withTimeout(`${API}/pokemon/${id}`).catch(() => {}), // some forms resolve by id as backup
+      withTimeout(`${API}/pokemon/${fetchName}`),
+      withTimeout(`${API}/pokemon/${id}`).catch(() => {}),
       withTimeout(`${API}/pokemon-species/${id}`),
-      withTimeout(`${API}/pokemon-species/${name}`).catch(() => {}),
+      withTimeout(`${API}/pokemon-species/${fetchName}`).catch(() => {}),
     ]);
   }, [pokemon.name, pokemon.pokemonId]);
 
